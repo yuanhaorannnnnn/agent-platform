@@ -1,0 +1,325 @@
+upstreams:
+  - id: agent-skills
+    label: Personal Skills
+    kind: git
+    repo: https://github.com/yuanhaorannnnnn/agent-skills.git
+    branch: main
+    integration_mode: managed_install
+    install:
+      cwd: "."
+      command:
+        - bash
+        - scripts/install.sh
+      runtime_dir: ~/.agents/skills
+    notes: >
+      agent-skills is a self-contained skills distribution repository.
+      It maintains its own installer and exposes skills directly to
+      ~/.agents/skills. The main repository no longer snapshots its contents;
+      it is the first managed_install upstream.
+    tracked_skills: []
+  - id: anthropics-skills
+    label: Anthropic Official
+    kind: git
+    repo: https://github.com/anthropics/skills.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      Track only skills that are both present in anthropics/skills and already
+      adopted in this repository. This manifest defines the current upstream
+      tracking scope; it does not imply automatic sync yet.
+    tracked_skills:
+      - name: algorithmic-art
+        source_path: skills/algorithmic-art
+        local_path: agent-platform/skills/algorithmic-art
+        sync_policy: track_upstream
+      - name: brand-guidelines
+        source_path: skills/brand-guidelines
+        local_path: agent-platform/skills/brand-guidelines
+        sync_policy: track_upstream
+      - name: canvas-design
+        source_path: skills/canvas-design
+        local_path: agent-platform/skills/canvas-design
+        sync_policy: track_upstream
+      - name: docx
+        source_path: skills/docx
+        local_path: agent-platform/skills/docx
+        sync_policy: track_upstream
+      - name: frontend-design
+        source_path: skills/frontend-design
+        local_path: agent-platform/skills/frontend-design
+        sync_policy: track_upstream
+      - name: pdf
+        source_path: skills/pdf
+        local_path: agent-platform/skills/pdf
+        sync_policy: track_upstream
+      - name: skill-creator
+        source_path: skills/skill-creator
+        local_path: agent-platform/skills/skill-creator
+        notes: >
+          This entry refers to the Anthropic upstream skill from
+          anthropics/skills, not the Codex built-in `.system/skill-creator`
+          currently available in the runtime environment.
+        sync_policy: track_upstream
+      - name: pptx
+        source_path: skills/pptx
+        local_path: agent-platform/skills/pptx
+        sync_policy: track_upstream
+      - name: theme-factory
+        source_path: skills/theme-factory
+        local_path: agent-platform/skills/theme-factory
+        sync_policy: track_upstream
+      - name: xlsx
+        source_path: skills/xlsx
+        local_path: agent-platform/skills/xlsx
+        sync_policy: track_upstream
+  - id: planning-with-files-repo
+    label: Third-Party Repo
+    cache_name: planning-with-files
+    kind: git
+    repo: https://github.com/OthmanAdi/planning-with-files.git
+    branch: master
+    integration_mode: managed_snapshot
+    notes: >
+      planning-with-files comes from a dedicated third-party repository.
+      Keep its upstream snapshot current, but do not auto-promote it into local
+      runtime skills because third-party skill projects usually provide
+      agent-specific variants.
+    tracked_skills:
+      - name: planning-with-files
+        source_path: skills/planning-with-files
+        local_path: agent-platform/skills/planning-with-files
+        sync_policy: track_snapshot
+  - id: superpowers-lite
+    label: Superpowers Lite
+    cache_name: superpowers
+    kind: git
+    repo: https://github.com/obra/superpowers.git
+    branch: main
+    integration_mode: managed_snapshot
+    runtime_link_mode: curated
+    notes: >
+      Selected Superpowers workflows only. Do not expose the full Superpowers
+      bundle, plugin hooks, or broad workflow surface because it is too noisy
+      for this local agent system. Start with only the TDD workflow.
+    tracked_skills:
+      - name: test-driven-development
+        source_path: skills/test-driven-development
+        local_path: agent-platform/skills/test-driven-development
+        sync_policy: track_snapshot
+  - id: karpathy-skills
+    label: Karpathy Guidelines
+    cache_name: andrej-karpathy-skills
+    kind: git
+    repo: https://github.com/forrestchang/andrej-karpathy-skills.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      Behavioral coding guidelines based on Andrej Karpathy's observations
+      about LLM coding pitfalls. Snapshot only the guideline skill; do not
+      install plugin metadata or agent-specific rules.
+    tracked_skills:
+      - name: karpathy-guidelines
+        source_path: skills/karpathy-guidelines
+        local_path: agent-platform/skills/karpathy-guidelines
+        sync_policy: track_snapshot
+  - id: gstack-repo
+    label: gstack
+    cache_name: gstack
+    kind: git
+    repo: https://github.com/garrytan/gstack.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      gstack is an external skill-set repository. Track its top-level skills as
+      upstream snapshots and expose them through the same managed linking flow
+      as other upstream bundles.
+    tracked_skills:
+      - name: autoplan
+        source_path: autoplan
+        local_path: agent-platform/skills/autoplan
+        sync_policy: track_snapshot
+      - name: benchmark
+        source_path: benchmark
+        local_path: agent-platform/skills/benchmark
+        sync_policy: track_snapshot
+      - name: browse
+        source_path: browse
+        local_path: agent-platform/skills/browse
+        sync_policy: track_snapshot
+      - name: canary
+        source_path: canary
+        local_path: agent-platform/skills/canary
+        sync_policy: track_snapshot
+      - name: careful
+        source_path: careful
+        local_path: agent-platform/skills/careful
+        sync_policy: track_snapshot
+      - name: codex
+        source_path: codex
+        local_path: agent-platform/skills/codex
+        sync_policy: track_snapshot
+      - name: cso
+        source_path: cso
+        local_path: agent-platform/skills/cso
+        sync_policy: track_snapshot
+      - name: design-consultation
+        source_path: design-consultation
+        local_path: agent-platform/skills/design-consultation
+        sync_policy: track_snapshot
+      - name: design-review
+        source_path: design-review
+        local_path: agent-platform/skills/design-review
+        sync_policy: track_snapshot
+      - name: document-release
+        source_path: document-release
+        local_path: agent-platform/skills/document-release
+        sync_policy: track_snapshot
+      - name: freeze
+        source_path: freeze
+        local_path: agent-platform/skills/freeze
+        sync_policy: track_snapshot
+      - name: gstack-upgrade
+        source_path: gstack-upgrade
+        local_path: agent-platform/skills/gstack-upgrade
+        sync_policy: track_snapshot
+      - name: guard
+        source_path: guard
+        local_path: agent-platform/skills/guard
+        sync_policy: track_snapshot
+      - name: investigate
+        source_path: investigate
+        local_path: agent-platform/skills/investigate
+        sync_policy: track_snapshot
+      - name: land-and-deploy
+        source_path: land-and-deploy
+        local_path: agent-platform/skills/land-and-deploy
+        sync_policy: track_snapshot
+      - name: office-hours
+        source_path: office-hours
+        local_path: agent-platform/skills/office-hours
+        sync_policy: track_snapshot
+      - name: plan-ceo-review
+        source_path: plan-ceo-review
+        local_path: agent-platform/skills/plan-ceo-review
+        sync_policy: track_snapshot
+      - name: plan-design-review
+        source_path: plan-design-review
+        local_path: agent-platform/skills/plan-design-review
+        sync_policy: track_snapshot
+      - name: plan-eng-review
+        source_path: plan-eng-review
+        local_path: agent-platform/skills/plan-eng-review
+        sync_policy: track_snapshot
+      - name: qa-only
+        source_path: qa-only
+        local_path: agent-platform/skills/qa-only
+        sync_policy: track_snapshot
+      - name: qa
+        source_path: qa
+        local_path: agent-platform/skills/qa
+        sync_policy: track_snapshot
+      - name: retro
+        source_path: retro
+        local_path: agent-platform/skills/retro
+        sync_policy: track_snapshot
+      - name: review
+        source_path: review
+        local_path: agent-platform/skills/review
+        sync_policy: track_snapshot
+      - name: setup-browser-cookies
+        source_path: setup-browser-cookies
+        local_path: agent-platform/skills/setup-browser-cookies
+        sync_policy: track_snapshot
+      - name: setup-deploy
+        source_path: setup-deploy
+        local_path: agent-platform/skills/setup-deploy
+        sync_policy: track_snapshot
+      - name: ship
+        source_path: ship
+        local_path: agent-platform/skills/ship
+        sync_policy: track_snapshot
+      - name: unfreeze
+        source_path: unfreeze
+        local_path: agent-platform/skills/unfreeze
+        sync_policy: track_snapshot
+  - id: ljg-skills
+    label: ljg-skills
+    kind: git
+    repo: https://github.com/lijigang/ljg-skills.git
+    branch: md
+    integration_mode: managed_snapshot
+    notes: >
+      ljg-skills is a third-party skills repository with Markdown-form skills on
+      the `md` branch. It fits the current managed_snapshot model because the
+      repository exposes skill folders under `skills/`. Note that `ljg-card`
+      also has extra npm/playwright dependencies which are not automatically
+      installed by snapshot sync alone.
+    tracked_skills:
+      - name: ljg-card
+        source_path: skills/ljg-card
+        local_path: agent-platform/skills/ljg-card
+        sync_policy: track_snapshot
+      - name: ljg-invest
+        source_path: skills/ljg-invest
+        local_path: agent-platform/skills/ljg-invest
+        sync_policy: track_snapshot
+      - name: ljg-learn
+        source_path: skills/ljg-learn
+        local_path: agent-platform/skills/ljg-learn
+        sync_policy: track_snapshot
+      - name: ljg-paper
+        source_path: skills/ljg-paper
+        local_path: agent-platform/skills/ljg-paper
+        sync_policy: track_snapshot
+      - name: ljg-paper-flow
+        source_path: skills/ljg-paper-flow
+        local_path: agent-platform/skills/ljg-paper-flow
+        sync_policy: track_snapshot
+      - name: ljg-paper-river
+        source_path: skills/ljg-paper-river
+        local_path: agent-platform/skills/ljg-paper-river
+        sync_policy: track_snapshot
+      - name: ljg-plain
+        source_path: skills/ljg-plain
+        local_path: agent-platform/skills/ljg-plain
+        sync_policy: track_snapshot
+      - name: ljg-rank
+        source_path: skills/ljg-rank
+        local_path: agent-platform/skills/ljg-rank
+        sync_policy: track_snapshot
+      - name: ljg-read
+        source_path: skills/ljg-read
+        local_path: agent-platform/skills/ljg-read
+        sync_policy: track_snapshot
+      - name: ljg-relationship
+        source_path: skills/ljg-relationship
+        local_path: agent-platform/skills/ljg-relationship
+        sync_policy: track_snapshot
+      - name: ljg-roundtable
+        source_path: skills/ljg-roundtable
+        local_path: agent-platform/skills/ljg-roundtable
+        sync_policy: track_snapshot
+      - name: ljg-skill-map
+        source_path: skills/ljg-skill-map
+        local_path: agent-platform/skills/ljg-skill-map
+        sync_policy: track_snapshot
+      - name: ljg-think
+        source_path: skills/ljg-think
+        local_path: agent-platform/skills/ljg-think
+        sync_policy: track_snapshot
+      - name: ljg-travel
+        source_path: skills/ljg-travel
+        local_path: agent-platform/skills/ljg-travel
+        sync_policy: track_snapshot
+      - name: ljg-word
+        source_path: skills/ljg-word
+        local_path: agent-platform/skills/ljg-word
+        sync_policy: track_snapshot
+      - name: ljg-word-flow
+        source_path: skills/ljg-word-flow
+        local_path: agent-platform/skills/ljg-word-flow
+        sync_policy: track_snapshot
+      - name: ljg-writes
+        source_path: skills/ljg-writes
+        local_path: agent-platform/skills/ljg-writes
+        sync_policy: track_snapshot

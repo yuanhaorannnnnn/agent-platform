@@ -1,0 +1,21 @@
+# Runtime state
+.agent-state/
+.planning/
+.claude/
+.codex/
+.kimi/
+.pi/
+.hermes/
+
+# Agent-platform runtime
+agent-platform/state/
+agent-platform/upstream/
+
+# Python
+__pycache__/
+*.pyc
+
+# Temporary files
+tmp/
+report-slides.html
+EOF
