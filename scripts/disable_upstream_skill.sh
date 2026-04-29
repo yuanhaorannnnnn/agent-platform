@@ -197,6 +197,22 @@ def list_skills(d: Path) -> list[str]:
 source = upstream_root / upstream_id
 disabled = disabled_root / upstream_id
 
+# ── Check for per-agent whitelist override ──
+has_agent_whitelist = False
+if agent_target:
+    state_data = {}
+    disabled_path = upstream_root.parent / "state" / "disabled-upstreams.yaml"
+    if disabled_path.exists():
+        import yaml as _yaml
+        _state_raw = _yaml.safe_load(disabled_path.read_text(encoding="utf-8"))
+        state_data = _state_raw.get("disabled", {}) if isinstance(_state_raw, dict) else {}
+    agent_sd = (state_data.get("agents") or {}).get(agent_target, {})
+    agent_enabled = agent_sd.get("enabled", {}) if isinstance(agent_sd, dict) else {}
+    if disable_all:
+        has_agent_whitelist = upstream_id in (agent_enabled.get("upstreams") or [])
+    else:
+        has_agent_whitelist = skill_name in (agent_enabled.get("skills") or {}).get(upstream_id, [])
+
 if disable_all:
     affected = list_skills(source)
     label = f"上游 {upstream_id} (全部 {len(affected)} skills)"
@@ -206,6 +222,14 @@ else:
 
 if not affected:
     source2 = disabled_root / upstream_id
+    if has_agent_whitelist:
+        if disable_all:
+            print(f"\n  [agent-platform] 即将移除 {upstream_id} 的 {agent_target} 白名单覆盖")
+            print(f"  上游 {upstream_id} 保持全局禁用，{agent_target} 白名单移除后该 agent 将不再可见。")
+        else:
+            print(f"\n  [agent-platform] 即将移除 {upstream_id}/{skill_name} 的 {agent_target} 白名单覆盖")
+            print(f"  skill {upstream_id}/{skill_name} 保持全局禁用，{agent_target} 白名单移除后该 agent 将不再可见。")
+        sys.exit(0)
     if disable_all:
         affected2 = list_skills(source2)
         if affected2:
@@ -295,38 +319,96 @@ if not isinstance(state, dict):
     state = {}
 disabled = state.setdefault("disabled", {})
 
+global_disabled_upstreams = disabled.get("upstreams") or []
+
 if agent:
     disabled.setdefault("agents", {})
-    target_disabled = disabled["agents"].setdefault(agent, {})
+    agent_state = disabled["agents"].setdefault(agent, {})
+    agent_state.setdefault("upstreams", [])
+    agent_state.setdefault("skills", {})
+
+    # ── Check for whitelist override first ──
+    agent_enabled = agent_state.get("enabled", {})
+    agent_enabled_upstreams = agent_enabled.get("upstreams") or []
+    agent_enabled_skills = agent_enabled.get("skills", {}).get(upstream, [])
+
+    if disable_all and upstream in agent_enabled_upstreams:
+        # Remove whitelist override → falls back to globally disabled
+        agent_enabled["upstreams"] = [u for u in agent_enabled_upstreams if u != upstream]
+        if not agent_enabled["upstreams"]:
+            agent_enabled.pop("upstreams", None)
+        if not agent_enabled:
+            agent_state.pop("enabled", None)
+
+    elif skill and skill in agent_enabled_skills:
+        # Remove whitelist override → falls back to globally disabled
+        agent_enabled["skills"][upstream] = [s for s in agent_enabled_skills if s != skill]
+        if not agent_enabled["skills"][upstream]:
+            agent_enabled["skills"].pop(upstream, None)
+            if not agent_enabled["skills"]:
+                agent_enabled.pop("skills", None)
+        if not agent_enabled:
+            agent_state.pop("enabled", None)
+
+    else:
+        # ── Not a whitelist removal: add to per-agent disabled ──
+        if disable_all:
+            if upstream not in agent_state["upstreams"]:
+                agent_state["upstreams"].append(upstream)
+        else:
+            if skill not in agent_state["skills"].get(upstream, []):
+                agent_state["skills"].setdefault(upstream, []).append(skill)
+
 else:
-    target_disabled = disabled
+    # ── Global disable: move to .disabled/ ──
+    source_upstream = upstream_root / upstream
+    target_upstream = disabled_root / upstream
 
-target_disabled.setdefault("upstreams", [])
-target_disabled.setdefault("skills", {})
+    if disable_all:
+        upstreams = disabled.setdefault("upstreams", [])
+        if upstream not in upstreams:
+            upstreams.append(upstream)
+        if source_upstream.exists():
+            target_upstream.parent.mkdir(parents=True, exist_ok=True)
+            if target_upstream.exists():
+                shutil.rmtree(target_upstream)
+            shutil.move(str(source_upstream), str(target_upstream))
+    else:
+        skills = disabled.setdefault("skills", {}).setdefault(upstream, [])
+        if skill not in skills:
+            skills.append(skill)
+        source = source_upstream / skill
+        target = target_upstream / skill
+        if source.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.move(str(source), str(target))
 
-source_upstream = upstream_root / upstream
-target_upstream = disabled_root / upstream
-
-if disable_all:
-    upstreams = target_disabled["upstreams"]
-    if upstream not in upstreams:
-        upstreams.append(upstream)
-    if not agent and source_upstream.exists():
-        target_upstream.parent.mkdir(parents=True, exist_ok=True)
-        if target_upstream.exists():
-            shutil.rmtree(target_upstream)
-        shutil.move(str(source_upstream), str(target_upstream))
-else:
-    skills = target_disabled["skills"].setdefault(upstream, [])
-    if skill not in skills:
-        skills.append(skill)
-    source = source_upstream / skill
-    target = target_upstream / skill
-    if not agent and source.exists():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            shutil.rmtree(target)
-        shutil.move(str(source), str(target))
+# Cleanup empty state keys
+if agent:
+    if "upstreams" in agent_state and not agent_state["upstreams"]:
+        agent_state.pop("upstreams", None)
+    if "skills" in agent_state and not agent_state["skills"]:
+        agent_state.pop("skills", None)
+    if "enabled" in agent_state:
+        ae = agent_state["enabled"]
+        if "upstreams" in ae and not ae["upstreams"]:
+            ae.pop("upstreams", None)
+        if "skills" in ae and not ae["skills"]:
+            ae.pop("skills", None)
+        if not ae:
+            agent_state.pop("enabled", None)
+    if not agent_state:
+        disabled["agents"].pop(agent, None)
+if not disabled.get("agents"):
+    disabled.pop("agents", None)
+if not disabled.get("upstreams"):
+    disabled.pop("upstreams", None)
+if not disabled.get("skills"):
+    disabled.pop("skills", None)
+if not disabled:
+    state.pop("disabled", None)
 
 state_path.parent.mkdir(parents=True, exist_ok=True)
 state_path.write_text(yaml.safe_dump(state, sort_keys=True), encoding="utf-8")

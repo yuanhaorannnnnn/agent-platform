@@ -165,6 +165,33 @@ else:
     print("  Per-Agent 禁用:  (无)")
     print()
 
+# --- Per-Agent Whitelist ---
+has_any_whitelist = False
+if agent_disabled:
+    for agent_id in sorted(agent_disabled):
+        if agent_filter and agent_id != agent_filter:
+            continue
+        ae = agent_disabled[agent_id].get("enabled", {}) if isinstance(agent_disabled[agent_id], dict) else {}
+        aeu = set(ae.get("upstreams") or [])
+        aesk = {}
+        for uid, skills in (ae.get("skills") or {}).items():
+            aesk[uid] = set(skills or [])
+        if aeu or aesk:
+            if not has_any_whitelist:
+                has_any_whitelist = True
+                print("  Per-Agent 白名单 (覆盖全局禁用):")
+                print()
+            parts = []
+            for uid in sorted(aeu):
+                parts.append(f"{uid} (整体)")
+            for uid in sorted(aesk):
+                parts.append(f"{uid}/{', '.join(sorted(aesk[uid]))}")
+            print(f"    {agent_id}:  {', '.join(parts)}")
+    if has_any_whitelist:
+        print()
+else:
+    pass  # no agent entries at all, no whitelist possible
+
 # --- Physically disabled ---
 if physically_disabled_upstreams:
     print("  物理禁用目录 (upstream/.disabled/):")

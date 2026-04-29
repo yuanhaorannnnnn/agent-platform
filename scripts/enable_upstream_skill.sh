@@ -253,42 +253,123 @@ if not isinstance(state, dict):
     state = {}
 disabled = state.setdefault("disabled", {})
 
+global_disabled_upstreams = disabled.get("upstreams") or []
+global_disabled_skills = disabled.get("skills") or {}
+
 if agent:
     disabled.setdefault("agents", {})
-    target_disabled = disabled["agents"].setdefault(agent, {})
+    agent_state = disabled["agents"].setdefault(agent, {})
+    agent_state.setdefault("upstreams", [])
+    agent_state.setdefault("skills", {})
+
+    # ── Check if globally disabled → add to agent whitelist ──
+    is_globally_disabled = (
+        upstream in global_disabled_upstreams
+        or (enable_all and upstream in global_disabled_upstreams)
+    )
+    if enable_all and upstream in global_disabled_upstreams:
+        # Whole upstream globally disabled → whitelist entire upstream for this agent
+        agent_enabled = agent_state.setdefault("enabled", {})
+        agent_enabled.setdefault("upstreams", [])
+        if upstream not in agent_enabled["upstreams"]:
+            agent_enabled["upstreams"].append(upstream)
+        # Also remove from agent disabled if present
+        agent_state["upstreams"] = [u for u in agent_state["upstreams"] if u != upstream]
+
+    elif upstream in global_disabled_upstreams:
+        # Whole upstream globally disabled → whitelist this specific skill
+        agent_enabled = agent_state.setdefault("enabled", {})
+        agent_enabled.setdefault("skills", {})
+        agent_enabled["skills"].setdefault(upstream, [])
+        if skill not in agent_enabled["skills"][upstream]:
+            agent_enabled["skills"][upstream].append(skill)
+
+    elif skill and skill in global_disabled_skills.get(upstream, []):
+        # Skill globally disabled → whitelist for this agent
+        agent_enabled = agent_state.setdefault("enabled", {})
+        agent_enabled.setdefault("skills", {})
+        agent_enabled["skills"].setdefault(upstream, [])
+        if skill not in agent_enabled["skills"][upstream]:
+            agent_enabled["skills"][upstream].append(skill)
+        # Also remove from agent disabled skills if present
+        agent_state["skills"][upstream] = [
+            s for s in agent_state["skills"].get(upstream, []) if s != skill
+        ]
+        if not agent_state["skills"][upstream]:
+            agent_state["skills"].pop(upstream, None)
+
+    else:
+        # ── Not globally disabled: use per-agent disable state ──
+        if enable_all:
+            agent_state["upstreams"] = [u for u in agent_state["upstreams"] if u != upstream]
+        else:
+            agent_state["skills"][upstream] = [
+                s for s in agent_state["skills"].get(upstream, []) if s != skill
+            ]
+            if not agent_state["skills"][upstream]:
+                agent_state["skills"].pop(upstream, None)
+
+        # Cleanup agent enabled whitelist if it was a re-enable of per-agent disable
+        agent_enabled = agent_state.get("enabled", {})
+        if enable_all and upstream in (agent_enabled.get("upstreams") or []):
+            agent_enabled["upstreams"] = [u for u in agent_enabled["upstreams"] if u != upstream]
+            if not agent_enabled["upstreams"]:
+                agent_enabled.pop("upstreams", None)
+        elif skill and skill in (agent_enabled.get("skills", {}).get(upstream, [])):
+            agent_enabled["skills"][upstream] = [
+                s for s in agent_enabled["skills"][upstream] if s != skill
+            ]
+            if not agent_enabled["skills"][upstream]:
+                agent_enabled["skills"].pop(upstream, None)
+            if not agent_enabled["skills"]:
+                agent_enabled.pop("skills", None)
+        if not agent_enabled:
+            agent_state.pop("enabled", None)
+
 else:
-    target_disabled = disabled
+    # ── Global enable (no --agent): restore from .disabled/ ──
+    target_upstream = upstream_root / upstream
+    disabled_upstream = disabled_root / upstream
 
-target_disabled.setdefault("upstreams", [])
-target_disabled.setdefault("skills", {})
+    if enable_all:
+        global_disabled_upstreams[:] = [u for u in global_disabled_upstreams if u != upstream]
+        if disabled_upstream.exists() and not target_upstream.exists():
+            target_upstream.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(disabled_upstream), str(target_upstream))
+    else:
+        global_disabled_skills[upstream] = [
+            s for s in global_disabled_skills.get(upstream, []) if s != skill
+        ]
+        if not global_disabled_skills.get(upstream):
+            global_disabled_skills.pop(upstream, None)
+        source = disabled_upstream / skill
+        target = target_upstream / skill
+        if source.exists() and not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), str(target))
 
-target_upstream = upstream_root / upstream
-disabled_upstream = disabled_root / upstream
-
-if enable_all:
-    target_disabled["upstreams"] = [item for item in target_disabled["upstreams"] if item != upstream]
-    if not agent and disabled_upstream.exists() and not target_upstream.exists():
-        target_upstream.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(disabled_upstream), str(target_upstream))
-else:
-    target_disabled["skills"][upstream] = [
-        item for item in target_disabled["skills"].get(upstream, []) if item != skill
-    ]
-    if not target_disabled["skills"][upstream]:
-        target_disabled["skills"].pop(upstream, None)
-    source = disabled_upstream / skill
-    target = target_upstream / skill
-    if not agent and source.exists() and not target.exists():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source), str(target))
+    disabled["upstreams"] = global_disabled_upstreams
+    disabled["skills"] = global_disabled_skills
 
 # Cleanup empty state keys
-if not target_disabled["upstreams"]:
-    target_disabled.pop("upstreams", None)
-if not target_disabled["skills"]:
-    target_disabled.pop("skills", None)
-if agent and not target_disabled:
-    disabled["agents"].pop(agent, None)
+if agent:
+    for key in list(agent_state.get("upstreams", [])):
+        if not agent_state["upstreams"]:
+            break
+    if "upstreams" in agent_state and not agent_state["upstreams"]:
+        agent_state.pop("upstreams", None)
+    if "skills" in agent_state and not agent_state["skills"]:
+        agent_state.pop("skills", None)
+    if "enabled" in agent_state:
+        ae = agent_state["enabled"]
+        if "upstreams" in ae and not ae["upstreams"]:
+            ae.pop("upstreams", None)
+        if "skills" in ae and not ae["skills"]:
+            ae.pop("skills", None)
+        if not ae:
+            agent_state.pop("enabled", None)
+    if not agent_state:
+        disabled["agents"].pop(agent, None)
 if not disabled.get("agents"):
     disabled.pop("agents", None)
 if not disabled.get("upstreams"):

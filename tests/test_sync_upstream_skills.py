@@ -11,10 +11,10 @@ from pathlib import Path
 import yaml
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = REPO_ROOT / "agent-platform" / "scripts" / "sync_upstream_skills.py"
-INSTALL_LINKS_PATH = REPO_ROOT / "agent-platform" / "scripts" / "install_links.sh"
-SYNC_ALL_PATH = REPO_ROOT / "agent-platform" / "scripts" / "sync_all_upstreams.py"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = REPO_ROOT / "scripts" / "sync_upstream_skills.py"
+INSTALL_LINKS_PATH = REPO_ROOT / "scripts" / "install_links.sh"
+SYNC_ALL_PATH = REPO_ROOT / "scripts" / "sync_all_upstreams.py"
 
 
 def load_module():
@@ -74,7 +74,7 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
     def test_manifest_keeps_noisy_upstreams_curated(self) -> None:
         module = load_module()
 
-        manifest_path = REPO_ROOT / "agent-platform" / "migration" / "upstream-manifest.yaml"
+        manifest_path = REPO_ROOT / "migration" / "upstream-manifest.yaml"
         superpowers = module.load_upstream_manifest(manifest_path, "superpowers-lite")
         karpathy = module.load_upstream_manifest(manifest_path, "karpathy-skills")
 
@@ -229,11 +229,11 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             home = Path(tmp)
             codex_skills = home / ".codex" / "skills"
             codex_skills.mkdir(parents=True)
-            upstream_root = REPO_ROOT / "agent-platform" / "upstream"
+            upstream_root = REPO_ROOT / "upstream"
             anthropic_docx = upstream_root / "anthropics-skills" / "docx"
             # docx must exist in the real upstream snapshot
             self.assertTrue(anthropic_docx.is_dir(), "anthropics-skills/docx must exist for this test")
-            stale_target = REPO_ROOT / "agent-platform" / "upstream" / "anthropics-skills" / "docx"
+            stale_target = REPO_ROOT / "upstream" / "anthropics-skills" / "docx"
             (codex_skills / "docx").symlink_to(stale_target)
 
             env = {
@@ -256,12 +256,12 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             claude_agents.mkdir(parents=True)
             claude_commands.mkdir(parents=True)
             claude_skills.mkdir(parents=True)
-            (claude_agents / "repo-agents").symlink_to(REPO_ROOT / "agent-platform" / "agents")
-            (claude_commands / "repo-commands").symlink_to(REPO_ROOT / "agent-platform" / "commands")
-            (claude_skills / "save-conversation").symlink_to(REPO_ROOT / "agent-platform" / "upstream" / "anthropics-skills" / "pdf")
+            (claude_agents / "repo-agents").symlink_to(REPO_ROOT / "scripts")
+            (claude_commands / "repo-commands").symlink_to(REPO_ROOT / "scripts")
+            (claude_skills / "save-conversation").symlink_to(REPO_ROOT / "upstream" / "anthropics-skills" / "pdf")
             nested_docx_dir = claude_skills / "docx"
             nested_docx_dir.mkdir()
-            (nested_docx_dir / "docx").symlink_to(REPO_ROOT / "agent-platform" / "upstream" / "anthropics-skills" / "docx")
+            (nested_docx_dir / "docx").symlink_to(REPO_ROOT / "upstream" / "anthropics-skills" / "docx")
 
             env = {
                 **subprocess.os.environ,
@@ -304,7 +304,7 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             home = tmp_path / "home"
             existing_skills = home / ".agents" / "skills"
             existing_skills.mkdir(parents=True)
-            (existing_skills / "docx").symlink_to(REPO_ROOT / "agent-platform" / "upstream" / "anthropics-skills" / "docx")
+            (existing_skills / "docx").symlink_to(REPO_ROOT / "upstream" / "anthropics-skills" / "docx")
             disabled_file = tmp_path / "disabled-upstreams.yaml"
             disabled_file.write_text(
                 yaml.safe_dump(

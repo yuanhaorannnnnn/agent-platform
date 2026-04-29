@@ -90,6 +90,13 @@ agent_disabled_skills = {
     upstream_id: set(skills or [])
     for upstream_id, skills in (agent_disabled.get("skills") or {}).items()
 }
+# ── Per-agent whitelist: overrides global disable ──
+agent_enabled = agent_disabled.get("enabled", {})
+agent_enabled_upstreams = set(agent_enabled.get("upstreams") or [])
+agent_enabled_skills = {
+    upstream_id: set(skills or [])
+    for upstream_id, skills in (agent_enabled.get("skills") or {}).items()
+}
 
 manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
 curated_upstreams = {}
@@ -100,26 +107,61 @@ for upstream in manifest_data.get("upstreams", []):
             s["name"] for s in upstream.get("tracked_skills", [])
         }
 
-for upstream_dir in upstream_root.iterdir():
-    if not upstream_dir.is_dir() or upstream_dir.name == ".disabled":
-        continue
-    upstream_id = upstream_dir.name
-    if upstream_id in disabled_upstreams or upstream_id in agent_disabled_upstreams:
-        continue
-    is_curated = upstream_id in curated_upstreams
-    for skill_dir in upstream_dir.iterdir():
-        if not skill_dir.is_dir():
+def upstream_is_globally_disabled(uid: str) -> bool:
+    return uid in disabled_upstreams
+
+def skill_is_globally_disabled(uid: str, skill: str) -> bool:
+    return skill in disabled_skills.get(uid, set())
+
+def agent_has_whitelist(uid: str, skill: str = "") -> bool:
+    """Check if this agent has a whitelist override for the upstream+skill combo."""
+    if uid in agent_enabled_upstreams:
+        return True
+    if skill and skill in agent_enabled_skills.get(uid, set()):
+        return True
+    return False
+
+def should_skip(uid: str, skill: str) -> bool:
+    # Per-agent disable takes highest priority (overrides both global and whitelist)
+    if uid in agent_disabled_upstreams:
+        return True
+    if skill in agent_disabled_skills.get(uid, set()):
+        return True
+    # If globally disabled but agent has whitelist, allow it
+    if upstream_is_globally_disabled(uid):
+        if agent_has_whitelist(uid, skill):
+            return False
+        return True
+    if skill_is_globally_disabled(uid, skill):
+        if agent_has_whitelist(uid, skill):
+            return False
+        return True
+    return False
+
+def scan_skills(scan_root: Path, label: str):
+    """Walk scan_root and emit skill targets that pass the skip filter."""
+    if not scan_root.exists():
+        return
+    for upstream_dir in sorted(scan_root.iterdir()):
+        if not upstream_dir.is_dir():
             continue
-        if not (skill_dir / "SKILL.md").is_file():
-            continue
-        skill_name = skill_dir.name
-        if skill_name in disabled_skills.get(upstream_id, set()):
-            continue
-        if skill_name in agent_disabled_skills.get(upstream_id, set()):
-            continue
-        if is_curated and skill_name not in curated_upstreams[upstream_id]:
-            continue
-        print(f"{skill_name}\t{skill_dir}")
+        upstream_id = upstream_dir.name
+        is_curated = upstream_id in curated_upstreams
+        for skill_dir in sorted(upstream_dir.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            if not (skill_dir / "SKILL.md").is_file():
+                continue
+            skill_name = skill_dir.name
+            if should_skip(upstream_id, skill_name):
+                continue
+            if is_curated and skill_name not in curated_upstreams[upstream_id]:
+                continue
+            print(f"{skill_name}\t{skill_dir}")
+
+scan_skills(upstream_root, "upstream")
+# Also scan .disabled for skills whitelisted by this agent
+scan_skills(upstream_root / ".disabled", ".disabled")
 PY
 }
 
