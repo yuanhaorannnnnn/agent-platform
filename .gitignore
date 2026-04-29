@@ -6,10 +6,8 @@
 .kimi/
 .pi/
 .hermes/
-
-# Agent-platform runtime
-agent-platform/state/
-agent-platform/upstream/
+state/
+upstream/
 
 # Python
 __pycache__/
