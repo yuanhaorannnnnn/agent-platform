@@ -323,3 +323,17 @@ upstreams:
         source_path: skills/ljg-writes
         local_path: agent-platform/skills/ljg-writes
         sync_policy: track_snapshot
+  - id: impeccable
+    label: Impeccable Design System
+    cache_name: impeccable
+    kind: git
+    repo: https://github.com/pbakaus/impeccable.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      pbakaus/impeccable is a design system skill for Figma and web design.
+      Managed as a snapshot; linked only to selected agent runtimes.
+    tracked_skills:
+      - name: impeccable
+        source_path: skill
+        sync_policy: track_snapshot
