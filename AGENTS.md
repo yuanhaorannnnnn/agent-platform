@@ -8,6 +8,8 @@
   读取 `~/.agents/skills/save-conversation/SKILL.md` 和 `~/.agents/skills/restore-conversation/SKILL.md`
 - 当前任务的 planning 文档与默认写入路径：
   `.planning/conversations/<conversation-id>/`
+- 深度研究报告输出路径：
+  `.research/<conversation>/<topic>-YYYYMMDD.md`
 - 项目级长期记忆与架构背景：
   `.agent-state/MEMORY.md`
 - 可复用错误模式与长期防错规则：
@@ -48,12 +50,26 @@
 - Do not keep planning files long-term in the repo root; migrate old files to the
   path above before continuing to maintain them.
 
+### Research
+
+- Deep-research output reports: `.research/<conversation>/<topic>-YYYYMMDD.md`
+- Standalone (no conversation): `.research/standalone/<topic>-YYYYMMDD.md`
+- Do not save research reports to `.planning/` to avoid confusion with plan-workspace files.
+
+### Proposal
+
+- Dev-design output documents: `.proposal/<conversation-id>/`
+- Standalone (no conversation): `.proposal/standalone/`
+- Do not save proposal documents to Desktop or temporary directories.
+
 ### Source Of Truth Map
 
 - Repo runtime memory + architecture: `.agent-state/MEMORY.md`
 - Guardrails (durable + runtime): `.agent-state/rules/mistakes.md`
 - Conversation recap: `.agent-state/conversations/<conversation>.md`
 - Task planning: `.planning/conversations/<conversation-id>/`
+- Research reports: `.research/<conversation>/`
+- Proposal documents: `.proposal/<conversation-id>/`
 - Personal skills source repo: `~/.agents/repos/agent-skills`
 - Runtime skill surface: `~/.agents/skills`
 <!-- END AGENT-SYSTEM -->
