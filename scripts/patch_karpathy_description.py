@@ -87,7 +87,6 @@ def patch_description(skill_path: Path) -> bool:
 
 def main():
     candidate_paths = [
-        Path("/media/yhr/2T/files/cc_projects/test/upstream/karpathy-skills/karpathy-guidelines/SKILL.md"),
         Path.home() / ".claude" / "skills" / "karpathy-guidelines" / "SKILL.md",
         Path.home() / ".agents" / "skills" / "karpathy-guidelines" / "SKILL.md",
     ]

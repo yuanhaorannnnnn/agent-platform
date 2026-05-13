@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+OS="$(uname -s)"
+
+if [ "$OS" = "Darwin" ]; then
+    echo "macOS detected — systemd not available."
+    echo "To schedule weekly upstream sync, use cron instead:"
+    echo ""
+    echo "  crontab -e"
+    echo "  0 9 * * 1 cd $(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) && python3 scripts/sync_all_upstreams.py --manifest migration/upstream-manifest.yaml --relink"
+    echo ""
+    echo "Or use launchd: https://www.launchd.info/"
+    echo "Skipping systemd timer installation."
+    exit 0
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
 USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
