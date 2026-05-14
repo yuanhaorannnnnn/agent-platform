@@ -323,6 +323,107 @@ upstreams:
         source_path: skills/ljg-writes
         local_path: agent-platform/skills/ljg-writes
         sync_policy: track_snapshot
+  - id: mattpocock-skills
+    label: Matt Pocock Skills
+    kind: git
+    repo: https://github.com/mattpocock/skills.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      Matt Pocock's personal skills collection. Organized by category
+      (engineering, productivity, deprecated, misc, personal, in-progress).
+      All skills disabled by default; enable individually as needed.
+    tracked_skills:
+      # --- engineering ---
+      - name: diagnose
+        source_path: skills/engineering/diagnose
+        sync_policy: track_snapshot
+      - name: grill-with-docs
+        source_path: skills/engineering/grill-with-docs
+        sync_policy: track_snapshot
+      - name: improve-codebase-architecture
+        source_path: skills/engineering/improve-codebase-architecture
+        sync_policy: track_snapshot
+      - name: prototype
+        source_path: skills/engineering/prototype
+        sync_policy: track_snapshot
+      - name: setup-matt-pocock-skills
+        source_path: skills/engineering/setup-matt-pocock-skills
+        sync_policy: track_snapshot
+      - name: tdd
+        source_path: skills/engineering/tdd
+        sync_policy: track_snapshot
+      - name: to-issues
+        source_path: skills/engineering/to-issues
+        sync_policy: track_snapshot
+      - name: to-prd
+        source_path: skills/engineering/to-prd
+        sync_policy: track_snapshot
+      - name: triage
+        source_path: skills/engineering/triage
+        sync_policy: track_snapshot
+      - name: zoom-out
+        source_path: skills/engineering/zoom-out
+        sync_policy: track_snapshot
+      # --- productivity ---
+      - name: caveman
+        source_path: skills/productivity/caveman
+        sync_policy: track_snapshot
+      - name: grill-me
+        source_path: skills/productivity/grill-me
+        sync_policy: track_snapshot
+      - name: handoff
+        source_path: skills/productivity/handoff
+        sync_policy: track_snapshot
+      - name: write-a-skill
+        source_path: skills/productivity/write-a-skill
+        sync_policy: track_snapshot
+      # --- in-progress ---
+      - name: review
+        source_path: skills/in-progress/review
+        sync_policy: track_snapshot
+      - name: writing-beats
+        source_path: skills/in-progress/writing-beats
+        sync_policy: track_snapshot
+      - name: writing-fragments
+        source_path: skills/in-progress/writing-fragments
+        sync_policy: track_snapshot
+      - name: writing-shape
+        source_path: skills/in-progress/writing-shape
+        sync_policy: track_snapshot
+      # --- misc ---
+      - name: git-guardrails-claude-code
+        source_path: skills/misc/git-guardrails-claude-code
+        sync_policy: track_snapshot
+      - name: migrate-to-shoehorn
+        source_path: skills/misc/migrate-to-shoehorn
+        sync_policy: track_snapshot
+      - name: scaffold-exercises
+        source_path: skills/misc/scaffold-exercises
+        sync_policy: track_snapshot
+      - name: setup-pre-commit
+        source_path: skills/misc/setup-pre-commit
+        sync_policy: track_snapshot
+      # --- personal ---
+      - name: edit-article
+        source_path: skills/personal/edit-article
+        sync_policy: track_snapshot
+      - name: obsidian-vault
+        source_path: skills/personal/obsidian-vault
+        sync_policy: track_snapshot
+      # --- deprecated ---
+      - name: design-an-interface
+        source_path: skills/deprecated/design-an-interface
+        sync_policy: track_snapshot
+      - name: qa
+        source_path: skills/deprecated/qa
+        sync_policy: track_snapshot
+      - name: request-refactor-plan
+        source_path: skills/deprecated/request-refactor-plan
+        sync_policy: track_snapshot
+      - name: ubiquitous-language
+        source_path: skills/deprecated/ubiquitous-language
+        sync_policy: track_snapshot
   - id: impeccable
     label: Impeccable Design System
     cache_name: impeccable
