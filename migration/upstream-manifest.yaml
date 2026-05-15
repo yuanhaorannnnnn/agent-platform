@@ -28,18 +28,6 @@ upstreams:
       adopted in this repository. This manifest defines the current upstream
       tracking scope; it does not imply automatic sync yet.
     tracked_skills:
-      - name: algorithmic-art
-        source_path: skills/algorithmic-art
-        local_path: agent-platform/skills/algorithmic-art
-        sync_policy: track_upstream
-      - name: brand-guidelines
-        source_path: skills/brand-guidelines
-        local_path: agent-platform/skills/brand-guidelines
-        sync_policy: track_upstream
-      - name: canvas-design
-        source_path: skills/canvas-design
-        local_path: agent-platform/skills/canvas-design
-        sync_policy: track_upstream
       - name: docx
         source_path: skills/docx
         local_path: agent-platform/skills/docx
@@ -63,10 +51,6 @@ upstreams:
       - name: pptx
         source_path: skills/pptx
         local_path: agent-platform/skills/pptx
-        sync_policy: track_upstream
-      - name: theme-factory
-        source_path: skills/theme-factory
-        local_path: agent-platform/skills/theme-factory
         sync_policy: track_upstream
       - name: xlsx
         source_path: skills/xlsx
