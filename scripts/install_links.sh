@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_ROOT="$ROOT_DIR/upstream"
 MANIFEST_PATH="$ROOT_DIR/migration/upstream-manifest.yaml"
 DISABLED_UPSTREAMS_PATH="${DISABLED_UPSTREAMS_PATH:-$ROOT_DIR/state/disabled-upstreams.yaml}"
-SKILL_AGENT_TARGETS="${SKILL_AGENT_TARGETS:-agents}"
+SKILL_AGENT_TARGETS="${SKILL_AGENT_TARGETS:-all}"
 
 target_dir_for_agent() {
   case "$1" in
