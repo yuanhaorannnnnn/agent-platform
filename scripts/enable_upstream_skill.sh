@@ -12,9 +12,9 @@ AGENT_SKILLS_MANIFEST="$AGENT_SKILLS_ROOT/manifest.yaml"
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  skill-enable [--agent <agents|codex|claude|kimi|pi|hermes>] [--dry-run] <upstream> <skill>
-  skill-enable [--agent <agents|codex|claude|kimi|pi|hermes>] [--dry-run] <upstream> --all
-  skill-enable [--agent <agents|codex|claude|kimi|pi|hermes>] [--dry-run] agent <skill>
+  skill-enable [--agent <agents|claude|hermes>] [--dry-run] <upstream> <skill>
+  skill-enable [--agent <agents|claude|hermes>] [--dry-run] <upstream> --all
+  skill-enable [--agent <agents|claude|hermes>] [--dry-run] agent <skill>
 EOF
 }
 
@@ -73,7 +73,7 @@ if [ "$all" != "true" ] && [ -z "$skill" ]; then
 fi
 
 case "$agent" in
-  ""|agents|codex|claude|kimi|pi|hermes)
+  ""|agents|claude|hermes)
     ;;
   *)
     usage
