@@ -12,17 +12,8 @@ target_dir_for_agent() {
     agents)
       printf '%s\n' "$HOME/.agents/skills"
       ;;
-    codex)
-      printf '%s\n' "$HOME/.codex/skills"
-      ;;
     claude)
       printf '%s\n' "$HOME/.claude/skills"
-      ;;
-    kimi)
-      printf '%s\n' "$HOME/.kimi/skills"
-      ;;
-    pi)
-      printf '%s\n' "$HOME/.pi/agent/skills"
       ;;
     hermes)
       printf '%s\n' "$HOME/.hermes/skills"
@@ -37,9 +28,9 @@ expand_agent_targets() {
   printf '%s\n' "$SKILL_AGENT_TARGETS" | tr ', ' '\n' | sed '/^$/d' | while IFS= read -r target; do
     case "$target" in
       all)
-        printf '%s\n' agents codex claude kimi pi hermes
+        printf '%s\n' agents claude hermes
         ;;
-      agents|codex|claude|kimi|pi|hermes)
+      agents|claude|hermes)
         printf '%s\n' "$target"
         ;;
       *)
@@ -165,7 +156,6 @@ scan_skills(upstream_root / ".disabled", ".disabled")
 PY
 }
 
-mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents" "$HOME/.kimi" "$HOME/.pi/agent" "$HOME/.hermes"
 
 if target_selected agents || target_selected claude; then
 if [ -d "$HOME/.claude/agents" ]; then
@@ -194,10 +184,7 @@ fi
 fi
 
 if target_selected agents || target_selected codex; then
-if [ -d "$HOME/.codex/skills" ]; then
-  rm -f "$HOME/.codex/skills/repo-skills"
 
-  for existing_link in "$HOME/.codex/skills"/*; do
     [ -L "$existing_link" ] || continue
     existing_target="$(readlink "$existing_link" || true)"
     case "$existing_target" in
