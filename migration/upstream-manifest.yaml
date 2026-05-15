@@ -337,3 +337,17 @@ upstreams:
       - name: impeccable
         source_path: skill
         sync_policy: track_snapshot
+  - id: paper2code
+    label: Paper2Code
+    kind: git
+    repo: https://github.com/PrathamLearnsToCode/paper2code.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      Converts arxiv papers into minimal, citation-anchored PyTorch
+      implementations. 5-stage pipeline with hallucination prevention
+      guardrails. Single skill repo.
+    tracked_skills:
+      - name: paper2code
+        source_path: skills/paper2code
+        sync_policy: track_snapshot
