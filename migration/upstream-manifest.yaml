@@ -422,3 +422,15 @@ upstreams:
       - name: impeccable
         source_path: skill
         sync_policy: track_snapshot
+
+  - id: awesome-design-md
+    label: Design References
+    kind: git
+    repo: https://github.com/VoltAgent/awesome-design-md.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      Curated collection of DESIGN.md files from developer-focused websites.
+      NOT a skill repo — reference assets for UI generation. Empty tracked_skills.
+      Changelog tracks updates; no runtime linking.
+    tracked_skills: []
