@@ -73,8 +73,8 @@ upstreams:
         source_path: skills/planning-with-files
         local_path: agent-platform/skills/planning-with-files
         sync_policy: track_snapshot
-  - id: superpowers-lite
-    label: Superpowers Lite
+  - id: superpowers
+    label: Superpowers
     cache_name: superpowers
     kind: git
     repo: https://github.com/obra/superpowers.git
