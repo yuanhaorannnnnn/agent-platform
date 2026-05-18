@@ -351,3 +351,19 @@ upstreams:
       - name: paper2code
         source_path: skills/paper2code
         sync_policy: track_snapshot
+  - id: codex-complexity-optimizer
+    label: Complexity Optimizer
+    cache_name: codex-complexity-optimizer
+    kind: git
+    repo: https://github.com/Kappaemme-git/codex-complexity-optimizer.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      Analyzes codebase for algorithmic complexity and performance hotspots
+      via bundled static-analysis scanner (10+ languages). Produces safe
+      optimization reports with risk levels. Report-only by default; code
+      modification only on explicit request.
+    tracked_skills:
+      - name: complexity-optimizer
+        source_path: complexity-optimizer
+        sync_policy: track_snapshot
