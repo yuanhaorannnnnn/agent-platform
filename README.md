@@ -54,7 +54,7 @@ skill-disable [--agent <agent>] <upstream> <skill>
 skill-enable [--agent <agent>] <upstream> <skill>
 
 # 同步上游快照
-python3 scripts/sync_upstream_skills.py --upstream-id anthropics-skills
+python3 scripts/sync_upstream_skills.py --upstream-id superpowers-lite
 ```
 
 ## 状态文件

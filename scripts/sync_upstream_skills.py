@@ -196,7 +196,7 @@ def promotable_skills(tracked_skills: list[dict]) -> list[dict]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sync tracked upstream skills into a local cache.")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST, help="Path to upstream manifest YAML")
-    parser.add_argument("--upstream-id", default="anthropics-skills", help="Manifest upstream id to sync")
+    parser.add_argument("--upstream-id", default="superpowers-lite", help="Manifest upstream id to sync")
     parser.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT, help="Directory holding cached upstream git repos")
     parser.add_argument("--sync-root", type=Path, default=DEFAULT_SYNC_ROOT, help="Directory to store synced upstream skill snapshots")
     parser.add_argument("--local-skills-root", type=Path, default=DEFAULT_LOCAL_SKILLS_ROOT, help="Directory holding repo-managed local skills")

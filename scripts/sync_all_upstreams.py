@@ -76,7 +76,7 @@ def discover_skills(source_repo: Path, upstream: dict) -> list[dict]:
     discovered: list[dict] = []
     seen: set[str] = set()
 
-    # Prefer skills/ convention (ljg-skills, anthropics-skills), fall back to root
+    # Prefer skills/ convention for skill-set repos, fall back to root.
     scan_bases: list[Path] = []
     skills_dir = source_repo / "skills"
     if skills_dir.exists():
