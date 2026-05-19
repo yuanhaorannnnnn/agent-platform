@@ -9,6 +9,12 @@ INSTALL_LINKS="$ROOT_DIR/scripts/install_links.sh"
 AGENT_SKILLS_ROOT="$HOME/.agents/repos/agent-skills"
 AGENT_SKILLS_MANIFEST="$AGENT_SKILLS_ROOT/manifest.yaml"
 
+# Resolve a Python 3 with PyYAML (system python3 may not have it)
+PYTHON3="$(command -v python3)"
+if ! "$PYTHON3" -c "import yaml" 2>/dev/null; then
+  PYTHON3="/home/lkshpc/anaconda3/bin/python3"
+fi
+
 usage() {
   cat >&2 <<'EOF'
 Usage:
@@ -89,7 +95,7 @@ if [ "$upstream" = "agent-skills" ]; then
   fi
 
   # Impact analysis (shared by dry-run and real execution)
-  python3 - "$AGENT_SKILLS_MANIFEST" "$skill" "$all" <<'PY'
+  $PYTHON3 - "$AGENT_SKILLS_MANIFEST" "$skill" "$all" <<'PY'
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -131,7 +137,7 @@ PY
   esac
 
   # Apply: modify manifest.yaml
-  python3 - "$AGENT_SKILLS_MANIFEST" "$skill" "$all" <<'PY'
+  $PYTHON3 - "$AGENT_SKILLS_MANIFEST" "$skill" "$all" <<'PY'
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -163,7 +169,7 @@ fi
 # ── Standard upstream: agent-platform ──────────────────────
 
 # Impact analysis
-python3 - "$UPSTREAM_ROOT" "$DISABLED_ROOT" "$upstream" "$skill" "$all" "$agent" <<'PY'
+$PYTHON3 - "$UPSTREAM_ROOT" "$DISABLED_ROOT" "$upstream" "$skill" "$all" "$agent" <<'PY'
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -297,7 +303,7 @@ case "$confirm" in
 esac
 
 # Execute: update YAML state and move directories
-python3 - "$STATE_PATH" "$UPSTREAM_ROOT" "$DISABLED_ROOT" "$upstream" "$skill" "$all" "$agent" <<'PY'
+$PYTHON3 - "$STATE_PATH" "$UPSTREAM_ROOT" "$DISABLED_ROOT" "$upstream" "$skill" "$all" "$agent" <<'PY'
 from __future__ import annotations
 
 import shutil

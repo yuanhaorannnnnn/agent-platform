@@ -7,6 +7,12 @@ STATE_PATH="${DISABLED_UPSTREAMS_PATH:-$ROOT_DIR/state/disabled-upstreams.yaml}"
 AGENT_SKILLS_ROOT="$HOME/.agents/repos/agent-skills"
 AGENT_SKILLS_MANIFEST="$AGENT_SKILLS_ROOT/manifest.yaml"
 
+# Resolve a Python 3 with PyYAML (system python3 may not have it)
+PYTHON3="$(command -v python3)"
+if ! "$PYTHON3" -c "import yaml" 2>/dev/null; then
+  PYTHON3="/home/lkshpc/anaconda3/bin/python3"
+fi
+
 usage() {
   cat >&2 <<'EOF'
 Usage:
@@ -39,7 +45,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-python3 - "$STATE_PATH" "$UPSTREAM_ROOT" "$AGENT_SKILLS_MANIFEST" "$AGENT_SKILLS_ROOT" "$ROOT_DIR" "$agent_filter" "$upstream_filter" <<'PY'
+$PYTHON3 - "$STATE_PATH" "$UPSTREAM_ROOT" "$AGENT_SKILLS_MANIFEST" "$AGENT_SKILLS_ROOT" "$ROOT_DIR" "$agent_filter" "$upstream_filter" <<'PY'
 from __future__ import annotations
 
 import sys
