@@ -18,9 +18,9 @@ fi
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  skill-disable [--agent <agents|codex|claude|kimi|pi|hermes>] [--dry-run] <upstream> <skill>
-  skill-disable [--agent <agents|codex|claude|kimi|pi|hermes>] [--dry-run] <upstream> --all
-  skill-disable [--agent <agents|codex|claude|kimi|pi|hermes>] [--dry-run] agent <skill>
+  skill-disable [--agent <agents|claude|hermes>] [--dry-run] <upstream> <skill>
+  skill-disable [--agent <agents|claude|hermes>] [--dry-run] <upstream> --all
+  skill-disable [--agent <agents|claude|hermes>] [--dry-run] agent <skill>
 EOF
 }
 
@@ -79,7 +79,7 @@ if [ "$all" != "true" ] && [ -z "$skill" ]; then
 fi
 
 case "$agent" in
-  ""|agents|codex|claude|kimi|pi|hermes)
+  ""|agents|claude|hermes)
     ;;
   *)
     usage
@@ -121,7 +121,7 @@ print(f"\n  [agent-skills] 即将禁用 {len(affected)} 个 skill:")
 for s in affected:
     print(f"    - {s['name']}: {s.get('description', '')[:60]}")
 print()
-print(f"  受影响 runtime: agents, claude, codex, kimi, pi, hermes (6 个)")
+print(f"  受影响 runtime: agents, claude, hermes (3 个)")
 PY
 
   if [ "$dry_run" = "true" ]; then
@@ -183,11 +183,7 @@ agent_target = sys.argv[6]
 
 RUNTIME_LABELS = {
     "agents": "~/.agents/skills",
-    "claude": "~/.claude/skills",
-    "codex": "~/.codex/skills",
-    "kimi": "~/.kimi/skills",
-    "pi": "~/.pi/agent/skills",
-    "hermes": "~/.hermes/skills",
+    "claude": "~/.claude/skills",    "hermes": "~/.hermes/skills",
 }
 
 def count_skills(d: Path) -> int:
@@ -263,11 +259,7 @@ for rt_id, rt_path in RUNTIME_LABELS.items():
 # Count potential symlink impact
 rt_dir_map = {
     "agents": Path.home() / ".agents" / "skills",
-    "claude": Path.home() / ".claude" / "skills",
-    "codex": Path.home() / ".codex" / "skills",
-    "kimi": Path.home() / ".kimi" / "skills",
-    "pi": Path.home() / ".pi" / "agent" / "skills",
-    "hermes": Path.home() / ".hermes" / "skills",
+    "claude": Path.home() / ".claude" / "skills",    "hermes": Path.home() / ".hermes" / "skills",
 }
 
 for rt_id, rt_dir in rt_dir_map.items():

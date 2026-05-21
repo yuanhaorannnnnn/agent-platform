@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
 USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
-SERVICE_NAME="codex-upstream-sync.service"
-TIMER_NAME="codex-upstream-sync.timer"
+SERVICE_NAME="agent-upstream-sync.service"
+TIMER_NAME="agent-upstream-sync.timer"
 SERVICE_PATH="$USER_SYSTEMD_DIR/$SERVICE_NAME"
 TIMER_PATH="$USER_SYSTEMD_DIR/$TIMER_NAME"
 

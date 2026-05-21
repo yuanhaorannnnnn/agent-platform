@@ -184,22 +184,6 @@ if [ -d "$HOME/.claude/commands" ]; then
 fi
 fi
 
-if target_selected agents || target_selected codex; then
-if [ -d "$HOME/.codex/skills" ]; then
-  rm -f "$HOME/.codex/skills/repo-skills"
-
-  for existing_link in "$HOME/.codex/skills"/*; do
-    [ -L "$existing_link" ] || continue
-    existing_target="$(readlink "$existing_link" || true)"
-    case "$existing_target" in
-      "$ROOT_DIR/"*|"$UPSTREAM_ROOT/"*)
-        rm -f "$existing_link"
-        ;;
-    esac
-  done
-fi
-fi
-
 if target_selected agents || target_selected claude; then
 if [ -d "$HOME/.claude/skills" ]; then
   while IFS= read -r existing_link; do

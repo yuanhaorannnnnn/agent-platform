@@ -120,7 +120,7 @@ print(f"\n  [agent-skills] 即将启用 {len(affected)} 个 skill:")
 for s in affected:
     print(f"    - {s['name']}: {s.get('description', '')[:60]}")
 print()
-print(f"  将恢复 symlink 到: agents, claude, codex, kimi, pi, hermes (6 个 runtime)")
+print(f"  将恢复 symlink 到: agents, claude, hermes (3 个 runtime)")
 PY
 
   if [ "$dry_run" = "true" ]; then
@@ -204,9 +204,6 @@ print(f"\n  [agent-platform] 即将启用: {label}")
 rt_dir_map = {
     "agents": Path.home() / ".agents" / "skills",
     "claude": Path.home() / ".claude" / "skills",
-    "codex": Path.home() / ".codex" / "skills",
-    "kimi": Path.home() / ".kimi" / "skills",
-    "pi": Path.home() / ".pi" / "agent" / "skills",
     "hermes": Path.home() / ".hermes" / "skills",
 }
 

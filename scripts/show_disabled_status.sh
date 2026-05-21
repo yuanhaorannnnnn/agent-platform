@@ -16,7 +16,7 @@ fi
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  skill-status [--agent <agents|codex|claude|kimi|pi|hermes>]
+  skill-status [--agent <agents|claude|hermes>]
   skill-status --upstream <upstream-id>
 EOF
 }
@@ -63,11 +63,7 @@ upstream_filter = sys.argv[7]
 
 RUNTIME_DIRS = {
     "agents": Path.home() / ".agents" / "skills",
-    "claude": Path.home() / ".claude" / "skills",
-    "codex": Path.home() / ".codex" / "skills",
-    "kimi": Path.home() / ".kimi" / "skills",
-    "pi": Path.home() / ".pi" / "agent" / "skills",
-    "hermes": Path.home() / ".hermes" / "skills",
+    "claude": Path.home() / ".claude" / "skills",    "hermes": Path.home() / ".hermes" / "skills",
 }
 
 # ── agent-platform state ──────────────────────────────────
