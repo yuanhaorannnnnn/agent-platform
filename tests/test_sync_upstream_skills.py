@@ -420,39 +420,6 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             self.assertTrue((home / ".agents" / "skills" / "karpathy-guidelines").is_symlink())
             self.assertTrue((home / ".agents" / "skills" / "test-driven-development").is_symlink())
 
-    def test_install_links_supports_hermes_agent_runtime(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            home = tmp_path / "home"
-            disabled_file = tmp_path / "disabled-upstreams.yaml"
-            disabled_file.write_text(
-                yaml.safe_dump(
-                    {
-                        "disabled": {
-                            "agents": {
-                                "hermes": {
-                                    "skills": {
-                                        "karpathy-skills": ["karpathy-guidelines"],
-                                    },
-                                },
-                            },
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
-            env = {
-                **subprocess.os.environ,
-                "HOME": str(home),
-                "DISABLED_UPSTREAMS_PATH": str(disabled_file),
-                "SKILL_AGENT_TARGETS": "hermes",
-            }
-
-            subprocess.run(["bash", str(INSTALL_LINKS_PATH)], check=True, env=env)
-
-            self.assertFalse((home / ".hermes" / "skills" / "karpathy-guidelines").exists())
-            self.assertTrue((home / ".hermes" / "skills" / "test-driven-development").is_symlink())
-
     def test_run_managed_install_executes_upstream_installer(self) -> None:
         module = load_sync_all_module()
 

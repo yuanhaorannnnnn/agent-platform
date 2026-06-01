@@ -15,9 +15,6 @@ target_dir_for_agent() {
     claude)
       printf '%s\n' "$HOME/.claude/skills"
       ;;
-    hermes)
-      printf '%s\n' "$HOME/.hermes/skills"
-      ;;
     *)
       return 1
       ;;
@@ -28,9 +25,9 @@ expand_agent_targets() {
   printf '%s\n' "$SKILL_AGENT_TARGETS" | tr ', ' '\n' | sed '/^$/d' | while IFS= read -r target; do
     case "$target" in
       all)
-        printf '%s\n' agents claude hermes
+        printf '%s\n' agents claude
         ;;
-      agents|claude|hermes)
+      agents|claude)
         printf '%s\n' "$target"
         ;;
       *)
@@ -156,7 +153,7 @@ scan_skills(upstream_root / ".disabled", ".disabled")
 PY
 }
 
-mkdir -p "$HOME/.claude" "$HOME/.agents" "$HOME/.hermes"
+mkdir -p "$HOME/.claude" "$HOME/.agents"
 
 if target_selected agents || target_selected claude; then
 if [ -d "$HOME/.claude/agents" ]; then

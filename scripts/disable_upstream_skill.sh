@@ -18,9 +18,9 @@ fi
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  skill-disable [--agent <agents|claude|hermes>] [--dry-run] <upstream> <skill>
-  skill-disable [--agent <agents|claude|hermes>] [--dry-run] <upstream> --all
-  skill-disable [--agent <agents|claude|hermes>] [--dry-run] agent <skill>
+  skill-disable [--agent <agents|claude>] [--dry-run] <upstream> <skill>
+  skill-disable [--agent <agents|claude>] [--dry-run] <upstream> --all
+  skill-disable [--agent <agents|claude>] [--dry-run] agent <skill>
 EOF
 }
 
@@ -79,7 +79,7 @@ if [ "$all" != "true" ] && [ -z "$skill" ]; then
 fi
 
 case "$agent" in
-  ""|agents|claude|hermes)
+  ""|agents|claude)
     ;;
   *)
     usage
@@ -121,7 +121,7 @@ print(f"\n  [agent-skills] 即将禁用 {len(affected)} 个 skill:")
 for s in affected:
     print(f"    - {s['name']}: {s.get('description', '')[:60]}")
 print()
-print(f"  受影响 runtime: agents, claude, hermes (3 个)")
+print(f"  受影响 runtime: agents, claude (2 个)")
 PY
 
   if [ "$dry_run" = "true" ]; then
@@ -183,7 +183,7 @@ agent_target = sys.argv[6]
 
 RUNTIME_LABELS = {
     "agents": "~/.agents/skills",
-    "claude": "~/.claude/skills",    "hermes": "~/.hermes/skills",
+    "claude": "~/.claude/skills",
 }
 
 def count_skills(d: Path) -> int:
@@ -259,7 +259,7 @@ for rt_id, rt_path in RUNTIME_LABELS.items():
 # Count potential symlink impact
 rt_dir_map = {
     "agents": Path.home() / ".agents" / "skills",
-    "claude": Path.home() / ".claude" / "skills",    "hermes": Path.home() / ".hermes" / "skills",
+    "claude": Path.home() / ".claude" / "skills",
 }
 
 for rt_id, rt_dir in rt_dir_map.items():

@@ -18,9 +18,9 @@ fi
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  skill-enable [--agent <agents|claude|hermes>] [--dry-run] <upstream> <skill>
-  skill-enable [--agent <agents|claude|hermes>] [--dry-run] <upstream> --all
-  skill-enable [--agent <agents|claude|hermes>] [--dry-run] agent <skill>
+  skill-enable [--agent <agents|claude>] [--dry-run] <upstream> <skill>
+  skill-enable [--agent <agents|claude>] [--dry-run] <upstream> --all
+  skill-enable [--agent <agents|claude>] [--dry-run] agent <skill>
 EOF
 }
 
@@ -79,7 +79,7 @@ if [ "$all" != "true" ] && [ -z "$skill" ]; then
 fi
 
 case "$agent" in
-  ""|agents|claude|hermes)
+  ""|agents|claude)
     ;;
   *)
     usage
@@ -120,7 +120,7 @@ print(f"\n  [agent-skills] 即将启用 {len(affected)} 个 skill:")
 for s in affected:
     print(f"    - {s['name']}: {s.get('description', '')[:60]}")
 print()
-print(f"  将恢复 symlink 到: agents, claude, hermes (3 个 runtime)")
+print(f"  将恢复 symlink 到: agents, claude (2 个 runtime)")
 PY
 
   if [ "$dry_run" = "true" ]; then
@@ -204,7 +204,6 @@ print(f"\n  [agent-platform] 即将启用: {label}")
 rt_dir_map = {
     "agents": Path.home() / ".agents" / "skills",
     "claude": Path.home() / ".claude" / "skills",
-    "hermes": Path.home() / ".hermes" / "skills",
 }
 
 runtimes_affected = []

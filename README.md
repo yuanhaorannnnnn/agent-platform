@@ -40,7 +40,6 @@ skill 通过 symlink 分发到以下 agent runtime 目录：
 | codex | `~/.codex/skills` |
 | kimi | `~/.kimi/skills` |
 | pi | `~/.pi/agent/skills` |
-| hermes | `~/.hermes/skills` |
 
 ## 使用
 
