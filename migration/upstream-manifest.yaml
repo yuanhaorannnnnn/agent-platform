@@ -312,3 +312,24 @@ upstreams:
       - name: complexity-optimizer
         source_path: complexity-optimizer
         sync_policy: track_snapshot
+  - id: brooks-lint
+    label: Brooks-Lint
+    cache_name: brooks-lint
+    kind: git
+    repo: https://github.com/hyhmrright/brooks-lint.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      AI code review grounded in twelve classic engineering books with structured
+      Symptom → Source → Consequence → Remedy findings and Health Score tracking.
+      Only brooks-review is tracked for review-gate integration; remaining skills
+      (audit/debt/health/sweep/test) overlap with existing capabilities.
+    tracked_skills:
+      - name: brooks-review
+        source_path: skills/brooks-review
+        local_path: agent-platform/skills/brooks-review
+        sync_policy: track_snapshot
+      - name: brooks-shared
+        source_path: skills/_shared
+        local_path: agent-platform/skills/_brooks-shared
+        sync_policy: track_snapshot
