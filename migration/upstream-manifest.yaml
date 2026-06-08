@@ -17,23 +17,6 @@ upstreams:
       ~/.agents/skills. The main repository no longer snapshots its contents;
       it is the first managed_install upstream.
     tracked_skills: []
-  - id: planning-with-files-repo
-    label: Third-Party Repo
-    cache_name: planning-with-files
-    kind: git
-    repo: https://github.com/OthmanAdi/planning-with-files.git
-    branch: master
-    integration_mode: managed_snapshot
-    notes: >
-      planning-with-files comes from a dedicated third-party repository.
-      Keep its upstream snapshot current, but do not auto-promote it into local
-      runtime skills because third-party skill projects usually provide
-      agent-specific variants.
-    tracked_skills:
-      - name: planning-with-files
-        source_path: skills/planning-with-files
-        local_path: agent-platform/skills/planning-with-files
-        sync_policy: track_snapshot
   - id: superpowers-lite
     label: Superpowers Lite
     cache_name: superpowers
@@ -321,7 +304,7 @@ upstreams:
     integration_mode: managed_snapshot
     notes: >
       AI code review grounded in twelve classic engineering books with structured
-      Symptom → Source → Consequence → Remedy findings and Health Score tracking.
+      Symptom -> Source -> Consequence -> Remedy findings and Health Score tracking.
       Only brooks-review is tracked for review-gate integration; remaining skills
       (audit/debt/health/sweep/test) overlap with existing capabilities.
     tracked_skills:
@@ -332,4 +315,36 @@ upstreams:
       - name: brooks-shared
         source_path: skills/_shared
         local_path: agent-platform/skills/_brooks-shared
+        sync_policy: track_snapshot
+  - id: book-to-skill
+    label: Book to Skill
+    cache_name: book-to-skill
+    kind: git
+    repo: https://github.com/virgiliojr94/book-to-skill.git
+    branch: master
+    integration_mode: managed_snapshot
+    notes: >
+      Converts technical books (PDF/EPUB/DOCX) into Claude Code skills
+      with chapter-level on-demand loading. Produces structured output:
+      SKILL.md, per-chapter summaries, glossary, patterns, cheatsheet.
+      Token-efficient — only relevant chapters load when queried.
+    tracked_skills:
+      - name: book-to-skill
+        source_path: .
+        sync_policy: track_snapshot
+  - id: gorden-ppt-skill
+    label: Gorden PPT Skill
+    cache_name: gorden-ppt-skill
+    kind: git
+    repo: https://github.com/GordenSun/GordenPPTSkill.git
+    branch: main
+    integration_mode: managed_snapshot
+    notes: >
+      17 hand-polished Chinese PPTX templates + non-destructive text-only
+      editing via python-pptx. Template + edits.json approach separates
+      content from layout. Personal/research use only — templates have
+      no commercial redistribution rights. Font dependency on 微软雅黑.
+    tracked_skills:
+      - name: gorden-ppt-skill
+        source_path: .
         sync_policy: track_snapshot
