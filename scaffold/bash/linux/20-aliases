@@ -1,0 +1,25 @@
+# =============================================================================
+# 20-aliases — Linux-specific
+# =============================================================================
+
+# --- Navigation -------------------------------------------------------------
+alias gt="cd /media/yhr/2T"
+alias gc="cd /media/yhr/2T/CarlaUE5"
+alias gp="cd /media/yhr/2T/files/cc_projects/"
+alias gs="cd /home/yhr/.agents/repos/agent-skills"
+
+# --- Conda environments -----------------------------------------------------
+alias sim="conda activate py38"
+alias sg="conda activate street-gaussian"
+
+# --- CARLA / UE5 build shortcuts --------------------------------------------
+alias lch="cmake --build Build --target launch -j 24"
+alias pge="cmake --build Build --target package -j 24"
+alias pyi="cmake --build Build --target carla-python-api -j 24"
+alias py="pip install /media/yhr/2T/CarlaUE5/Build/PythonAPI/dist/carla-0.10.0-cp38-cp38-linux_x86_64.whl --force-reinstall"
+alias sdl="cp /media/yhr/2T/UE5ForCarla/Engine/Source/ThirdParty/SDL2/SDL-gui-backend/lib/Linux/x86_64-unknown-linux-gnu/libSDL2* /media/yhr/2T/UE5ForCarla/Engine/Source/ThirdParty/SDL2/SDL-gui-backend/lib/Unix/x86_64-unknown-linux-gnu/"
+
+# --- System utils -----------------------------------------------------------
+alias nv="nvidia-smi"
+alias xo="xdg-open"
+alias fixmouse='sudo modprobe -r hid_logitech_hidpp; sudo modprobe hid_logitech_hidpp; echo "mouse reset done"'

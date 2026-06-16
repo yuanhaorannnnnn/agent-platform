@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# =============================================================================
+# deploy — 一键部署 scaffold + agent-platform + agent-skills
+# =============================================================================
+set -euo pipefail
+
+# --- repo locations (configurable via env vars) ------------------------------
+SCAFFOLD_DIR="${SCAFFOLD_DIR:-$HOME/scaffold}"
+AGENT_PLATFORM_DIR="${AGENT_PLATFORM_DIR:-$HOME/agent-platform}"
+AGENT_SKILLS_DIR="${AGENT_SKILLS_DIR:-$HOME/.agents/repos/agent-skills}"
+
+SCAFFOLD_REPO="https://github.com/yuanhaorannnnnn/scaffold.git"
+AGENT_PLATFORM_REPO="https://github.com/yuanhaorannnnnn/agent-platform.git"
+AGENT_SKILLS_REPO="https://github.com/yuanhaorannnnnn/agent-skills.git"
+
+OS="$(uname -s)"
+
+# Default branches: macOS uses 'mac' branches, Linux uses 'master'/'main'
+if [ "$OS" = "Darwin" ]; then
+    PLATFORM_BRANCH="${PLATFORM_BRANCH:-mac}"
+    SKILLS_BRANCH="${SKILLS_BRANCH:-mac}"
+else
+    PLATFORM_BRANCH="${PLATFORM_BRANCH:-master}"
+    SKILLS_BRANCH="${SKILLS_BRANCH:-main}"
+fi
+PULL=false
+
+# --- helpers -----------------------------------------------------------------
+say()  { echo "==> $*"; }
+ok()   { echo "✅ $*"; }
+warn() { echo "⚠️  $*"; }
+die()  { echo "❌ $*" >&2; exit 1; }
+
+ensure_repo() {
+    local repo=$1 dest=$2 branch=$3
+    if [ -d "$dest/.git" ]; then
+        if $PULL; then
+            say "Updating $dest ..."
+            git -C "$dest" fetch origin
+            git -C "$dest" checkout "$branch"
+            git -C "$dest" pull --ff-only origin "$branch"
+            ok "$dest ($branch)"
+        else
+            ok "Found $dest"
+        fi
+    else
+        say "Cloning $repo → $dest ($branch) ..."
+        mkdir -p "$(dirname "$dest")"
+        git clone --branch "$branch" "$repo" "$dest"
+        ok "$dest ($branch)"
+    fi
+}
+
+# --- usage -------------------------------------------------------------------
+usage() {
+    echo "Usage: deploy [--pull]"
+    echo ""
+    echo "  无参数      缺失的仓库自动 clone，已有的直接使用"
+    echo "  --pull      拉取所有仓库的最新版本后安装"
+    echo ""
+    echo "  环境变量覆盖:"
+    echo "    SCAFFOLD_DIR=$SCAFFOLD_DIR"
+    echo "    AGENT_PLATFORM_DIR=$AGENT_PLATFORM_DIR"
+    echo "    AGENT_SKILLS_DIR=$AGENT_SKILLS_DIR"
+    exit 0
+}
+
+# --- parse args --------------------------------------------------------------
+case "${1:-}" in
+    --pull)  PULL=true ;;
+    -h|--help) usage ;;
+    "") ;;
+    *) die "Unknown option: $1" ;;
+esac
+
+# --- discover scaffold root --------------------------------------------------
+if [ -f "$(dirname "$0")/../install.sh" ]; then
+    SCAFFOLD_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+    ok "Running from scaffold repo: $SCAFFOLD_DIR"
+    SCAFFOLD_REPO=""  # already local, skip clone
+fi
+
+echo ""
+echo "┌──────────────────────────────────────────────────┐"
+echo "│              scaffold deploy                      │"
+echo "│  OS: $OS"
+echo "└──────────────────────────────────────────────────┘"
+echo ""
+
+# --- macOS preflight ---------------------------------------------------------
+if [ "$OS" = "Darwin" ]; then
+    if ! command -v brew >/dev/null 2>&1; then
+        die "Homebrew not found. Install: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+    fi
+    ok "Homebrew found"
+
+    BREW_BASH="/opt/homebrew/bin/bash"
+    [ -x "$BREW_BASH" ] || BREW_BASH="/usr/local/bin/bash"
+    if [ ! -x "$BREW_BASH" ]; then
+        say "Installing Homebrew bash ..."
+        brew install bash
+    fi
+    ok "bash $("$BREW_BASH" --version | awk '{print $4}')"
+
+    if [ "$SHELL" != "$BREW_BASH" ]; then
+        say "Switching default shell to $BREW_BASH ..."
+        sudo chsh -s "$BREW_BASH" "$USER"
+        ok "Default shell → $BREW_BASH (re-login to take effect)"
+    fi
+
+    # Dependencies
+    for pkg in eza fzf starship zoxide git; do
+        if ! command -v "$pkg" >/dev/null 2>&1; then
+            say "Installing $pkg ..."
+            brew install "$pkg"
+        fi
+    done
+    ok "Homebrew dependencies ready"
+
+    # python3
+    if ! command -v python3 >/dev/null 2>&1; then
+        say "python3 not found — install Xcode Command Line Tools: xcode-select --install"
+    else
+        ok "python3 $(python3 --version 2>&1)"
+    fi
+    echo ""
+fi
+
+# --- step 1: scaffold --------------------------------------------------------
+echo "── [1/3] scaffold ────────────────────────────────"
+if [ -n "$SCAFFOLD_REPO" ]; then
+    ensure_repo "$SCAFFOLD_REPO" "$SCAFFOLD_DIR" master
+fi
+if [ ! -f "$SCAFFOLD_DIR/install.sh" ]; then
+    die "scaffold not found at $SCAFFOLD_DIR"
+fi
+(cd "$SCAFFOLD_DIR" && bash install.sh)
+echo ""
+
+# --- step 2: agent-platform --------------------------------------------------
+echo "── [2/3] agent-platform ──────────────────────────"
+ensure_repo "$AGENT_PLATFORM_REPO" "$AGENT_PLATFORM_DIR" "$PLATFORM_BRANCH"
+say "Syncing upstream skills ..."
+(cd "$AGENT_PLATFORM_DIR" && python3 scripts/sync_all_upstreams.py --manifest migration/upstream-manifest.yaml --relink)
+say "Installing runtime symlinks ..."
+(cd "$AGENT_PLATFORM_DIR" && bash scripts/install_links.sh)
+echo ""
+
+# --- step 3: agent-skills ----------------------------------------------------
+echo "── [3/3] agent-skills ────────────────────────────"
+ensure_repo "$AGENT_SKILLS_REPO" "$AGENT_SKILLS_DIR" "$SKILLS_BRANCH"
+say "Installing agent skills ..."
+(cd "$AGENT_SKILLS_DIR" && bash scripts/install.sh)
+echo ""
+
+# --- done --------------------------------------------------------------------
+echo "┌──────────────────────────────────────────────────┐"
+echo "│              部署完成                             │"
+echo "└──────────────────────────────────────────────────┘"
+echo ""
+echo "  下一步:"
+echo "    1. 编辑 $SCAFFOLD_DIR/bash/secrets"
+echo "       cp $SCAFFOLD_DIR/bash/secrets.example $SCAFFOLD_DIR/bash/secrets"
+echo "    2. 填入 API keys"
+echo "    3. 新开终端或执行: source ~/.bashrc"
+echo "    4. claude-switch kimi    # 选择 provider"
+echo "    5. claude-switch list   # 查看所有 profile"
+echo ""

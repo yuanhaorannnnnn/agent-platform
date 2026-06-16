@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# =============================================================================
+# audit-bin.sh — Audit ~/.local/bin to find who installed what
+# =============================================================================
+
+BINDIR="${1:-$HOME/.local/bin}"
+
+echo "═══════════════════════════════════════════════════════════════════"
+echo "  AUDIT: $BINDIR"
+echo "═══════════════════════════════════════════════════════════════════"
+
+# Pre-build pip script name set from all site-packages RECORD files
+declare -A PIP_SCRIPTS
+declare -A CONDA_SCRIPTS
+
+while IFS= read -r sitepkg; do
+    [ -d "$sitepkg" ] || continue
+    while IFS= read -r name; do
+        [ -n "$name" ] && PIP_SCRIPTS["$name"]=1
+    done < <(grep -hE '(^\.\./\.\.\/\.\./bin/|^bin/)' "$sitepkg"/*.dist-info/RECORD 2>/dev/null | sed 's|.*/||; s|,.*||')
+done < <(python3 -c "
+import site, glob, os
+paths = site.getsitepackages() + [site.getusersitepackages()]
+# conda env site-packages
+for d in glob.glob(os.path.expanduser('~/anaconda3/envs/*/lib/python*/site-packages')):
+    paths.append(d)
+# user-site packages for other Python versions (pip install --user from any python)
+for d in glob.glob(os.path.expanduser('~/.local/lib/python*/site-packages')):
+    paths.append(d)
+for p in paths:
+    print(p)
+" 2>/dev/null)
+
+# Pre-build conda script name set from conda-meta JSON files
+while IFS= read -r conda_meta_dir; do
+    [ -d "$conda_meta_dir" ] || continue
+    while IFS= read -r name; do
+        [ -n "$name" ] && CONDA_SCRIPTS["$name"]=1
+    done < <(python3 -c "
+import json, glob
+for f in sorted(glob.glob('$conda_meta_dir' '/*.json')):
+    try:
+        with open(f) as fh:
+            d = json.load(fh)
+        for p in d.get('paths_data', {}).get('paths', []):
+            path = p.get('_path', '')
+            if 'bin/' in path:
+                print(path.rsplit('/', 1)[-1])
+    except: pass
+" 2>/dev/null)
+done < <(python3 -c "import glob, os; base = os.path.expanduser('~/anaconda3'); print(base + '/conda-meta'); [print(d) for d in glob.glob(base + '/envs/*/conda-meta')]" 2>/dev/null)
+
+for f in "$BINDIR"/*; do
+    [ -f "$f" ] || continue
+    [ -x "$f" ] || continue
+
+    name=$(basename "$f")
+    size=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null || echo "?")
+    shebang=$(head -1 "$f" 2>/dev/null)
+
+    # ── Determine source ──
+    source="UNKNOWN"
+    detail=""
+
+    # 1. Check if managed by dpkg (Debian/Ubuntu package)
+    if command -v dpkg >/dev/null 2>&1; then
+        pkg=$(dpkg -S "$f" 2>/dev/null | cut -d: -f1)
+        if [ -n "$pkg" ]; then
+            source="APT"
+            detail="$pkg"
+        fi
+    fi
+
+    # 2. Python script: conda -> pip -> custom
+    if [ "$source" = "UNKNOWN" ]; then
+        if [[ "$shebang" == *python* ]] || [[ "$shebang" == *Python* ]]; then
+            if [ -n "${CONDA_SCRIPTS[$name]:-}" ]; then
+                source="CONDA"
+                detail=""
+            elif [ -n "${PIP_SCRIPTS[$name]:-}" ]; then
+                source="PIP"
+                detail=""
+            else
+                source="CUSTOM-PYTHON"
+                detail=""
+            fi
+        fi
+    fi
+
+    # 3. Node / npm
+    if [ "$source" = "UNKNOWN" ]; then
+        if [[ "$shebang" == *node* ]] || [[ "$shebang" == *nodejs* ]]; then
+            source="NPM"
+            detail=""
+        fi
+    fi
+
+    # 4. Shell scripts
+    if [ "$source" = "UNKNOWN" ]; then
+        if [[ "$shebang" == *bash* ]] || [[ "$shebang" == *sh* ]] || [[ "$shebang" == *zsh* ]]; then
+            if [ "$size" -lt 2048 ]; then
+                source="CUSTOM-SHELL"
+                detail=""
+            else
+                source="SYS"
+                detail=""
+            fi
+        fi
+    fi
+
+    # 5. Binary / compiled
+    if [ "$source" = "UNKNOWN" ]; then
+        if [[ "$shebang" == \#\!* ]]; then
+            source="OTHER"
+            detail="$shebang"
+        else
+            source="BINARY"
+            filetype=$(file -b "$f" 2>/dev/null | cut -d, -f1)
+            detail="$filetype"
+        fi
+    fi
+
+    # ── Output ──
+    printf "%-16s %-30s %s\n" "$source" "$name" "$f"
+done

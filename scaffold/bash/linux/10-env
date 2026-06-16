@@ -1,0 +1,23 @@
+# =============================================================================
+# 10-env — Linux-specific environment & PATH
+# =============================================================================
+
+# --- CUDA -------------------------------------------------------------------
+export PATH=$PATH:/usr/local/cuda/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/extras/CUPTI/lib64
+
+# --- GCC --------------------------------------------------------------------
+add_path /usr/bin/gcc/bin
+
+# --- CMake 3.28.3 -----------------------------------------------------------
+add_path /opt/cmake-3.28.3-linux-x86_64/bin
+
+# --- Neovim -----------------------------------------------------------------
+add_path /opt/nvim
+
+# --- CARLA / UE5 ------------------------------------------------------------
+export CARLA_UNREAL_ENGINE_PATH=/media/yhr/2T/UE5ForCarla
+
+# --- HuggingFace cache redirect ---------------------------------------------
+export HF_HOME="/media/yhr/2T/.cache"

@@ -1,0 +1,36 @@
+# =============================================================================
+# 30-functions — Linux-specific
+# =============================================================================
+
+# --- UE5 path switcher ------------------------------------------------------
+ue_path() {
+    if [ "$1" -eq 1 ]; then
+        export CARLA_UNREAL_ENGINE_PATH=$HOME/carlahub/UnrealEngine5_carla
+        echo "CARLA_UNREAL_ENGINE_PATH set to $HOME/carlahub/UnrealEngine5_carla"
+    elif [ "$1" -eq 2 ]; then
+        export CARLA_UNREAL_ENGINE_PATH=/media/yhr/2T/UE5ForCarla
+        echo "CARLA_UNREAL_ENGINE_PATH set to /media/yhr/2T/UE5ForCarla"
+    else
+        echo "Usage: ue_path {1|2}"
+        echo "  1 -> ~/carlahub/UnrealEngine5_carla"
+        echo "  2 -> /media/yhr/2T/UE5ForCarla"
+    fi
+}
+
+# --- CUDA version switcher --------------------------------------------------
+cuda() {
+    local cuda_version=$1
+    local cuda_path="/usr/local/cuda-$cuda_version"
+
+    if [ -d "$cuda_path" ]; then
+        sudo ln -sfn "$cuda_path" /usr/local/cuda
+        export PATH="$cuda_path/bin:$PATH"
+        export LD_LIBRARY_PATH="$cuda_path/lib64:$LD_LIBRARY_PATH"
+        export CUDA_HOME="$cuda_path"
+        export CUDA_VERSION=$cuda_version
+        echo "CUDA environment set to version $cuda_version"
+    else
+        echo "CUDA version $cuda_version not found at $cuda_path"
+        return 1
+    fi
+}

@@ -13,6 +13,9 @@ upstream/
 __pycache__/
 *.pyc
 
+# Secrets (never commit)
+scaffold/bash/secrets
+
 # Temporary files
 tmp/
 report-slides.html

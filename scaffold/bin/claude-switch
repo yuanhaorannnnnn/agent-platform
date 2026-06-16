@@ -1,0 +1,364 @@
+#!/usr/bin/env bash
+# Switch Claude Code settings between local provider profiles.
+set -euo pipefail
+
+CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
+CURRENT_CONFIG="$CLAUDE_DIR/settings.json"
+BACKUP_DIR="$CLAUDE_DIR/config_backups"
+
+# readlink -f polyfill (GNU/BSD compatible)
+_readlink_f() {
+    if command -v greadlink >/dev/null 2>&1; then
+        greadlink -f "$1"
+    elif readlink -f / >/dev/null 2>&1; then
+        readlink -f "$1"
+    else
+        python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$1"
+    fi
+}
+SCRIPT_DIR="$(cd "$(dirname "$(_readlink_f "${BASH_SOURCE[0]}")")" && pwd)"
+unset _readlink_f
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+SECRETS_FILE="${CLAUDE_SWITCH_SECRETS:-$REPO_DIR/bash/secrets}"
+
+[ -f "$SECRETS_FILE" ] && source "$SECRETS_FILE"
+
+json_env() {
+    local file=$1
+    local name=$2
+
+    python3 - "$file" "$name" <<'PY'
+import json
+import sys
+
+path, name = sys.argv[1], sys.argv[2]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    value = data.get("env", {}).get(name)
+    print(value if value else "(unset)")
+except Exception:
+    print("(invalid)")
+PY
+}
+
+profile_name() {
+    local base
+    base=$(basename "$1")
+    base=${base#settings_}
+    echo "${base%.json}"
+}
+
+collect_profiles() {
+    profiles=()
+    local config
+
+    shopt -s nullglob
+    for config in "$CLAUDE_DIR"/settings_*.json; do
+        profiles+=("$config")
+    done
+    shopt -u nullglob
+}
+
+print_config_summary() {
+    local file=$1
+
+    echo "  URL:   $(json_env "$file" ANTHROPIC_BASE_URL)"
+    echo "  Model: $(json_env "$file" ANTHROPIC_MODEL)"
+    echo "  Haiku: $(json_env "$file" ANTHROPIC_DEFAULT_HAIKU_MODEL)"
+}
+
+first_value() {
+    local name
+
+    for name in "$@"; do
+        if [ -n "${!name:-}" ]; then
+            printf "%s" "${!name}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+backup_current() {
+    mkdir -p "$BACKUP_DIR"
+    if [ -f "$CURRENT_CONFIG" ]; then
+        cp "$CURRENT_CONFIG" "$BACKUP_DIR/settings_backup_$(date +%Y%m%d_%H%M%S).json"
+    fi
+}
+
+write_env_profile() {
+    local profile=$1
+    local auth_mode=$2
+    local token=$3
+    local base_url=$4
+    local model=$5
+    local opus_model=$6
+    local sonnet_model=$7
+    local haiku_model=$8
+    local subagent_model=$9
+    local effort_level=${10}
+
+    backup_current
+    mkdir -p "$CLAUDE_DIR"
+
+    PROFILE_NAME="$profile" AUTH_MODE="$auth_mode" AUTH_TOKEN_VALUE="$token" \
+    BASE_URL_VALUE="$base_url" MODEL_VALUE="$model" OPUS_MODEL_VALUE="$opus_model" \
+    SONNET_MODEL_VALUE="$sonnet_model" HAIKU_MODEL_VALUE="$haiku_model" \
+    SUBAGENT_MODEL_VALUE="$subagent_model" EFFORT_LEVEL_VALUE="$effort_level" \
+    python3 - "$CURRENT_CONFIG" <<'PY'
+import json
+import os
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+except FileNotFoundError:
+    data = {}
+except json.JSONDecodeError:
+    data = {}
+
+env = data.get("env")
+if not isinstance(env, dict):
+    env = {}
+
+for key in (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL",
+    "CLAUDE_CODE_EFFORT_LEVEL",
+):
+    env.pop(key, None)
+
+auth_mode = os.environ["AUTH_MODE"]
+if auth_mode == "api_key":
+    env["ANTHROPIC_API_KEY"] = os.environ["AUTH_TOKEN_VALUE"]
+else:
+    env["ANTHROPIC_AUTH_TOKEN"] = os.environ["AUTH_TOKEN_VALUE"]
+
+if os.environ["BASE_URL_VALUE"]:
+    env["ANTHROPIC_BASE_URL"] = os.environ["BASE_URL_VALUE"]
+if os.environ["MODEL_VALUE"]:
+    env["ANTHROPIC_MODEL"] = os.environ["MODEL_VALUE"]
+if os.environ["OPUS_MODEL_VALUE"]:
+    env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = os.environ["OPUS_MODEL_VALUE"]
+if os.environ["SONNET_MODEL_VALUE"]:
+    env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = os.environ["SONNET_MODEL_VALUE"]
+if os.environ["HAIKU_MODEL_VALUE"]:
+    env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = os.environ["HAIKU_MODEL_VALUE"]
+if os.environ["SUBAGENT_MODEL_VALUE"]:
+    env["CLAUDE_CODE_SUBAGENT_MODEL"] = os.environ["SUBAGENT_MODEL_VALUE"]
+if os.environ["EFFORT_LEVEL_VALUE"]:
+    env["CLAUDE_CODE_EFFORT_LEVEL"] = os.environ["EFFORT_LEVEL_VALUE"]
+
+data["env"] = env
+tmp_path = f"{path}.tmp"
+with open(tmp_path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.replace(tmp_path, path)
+PY
+
+    chmod 600 "$CURRENT_CONFIG"
+    echo "Switched Claude Code profile: $profile"
+    print_config_summary "$CURRENT_CONFIG"
+    echo "Restart Claude Code to apply."
+}
+
+switch_env_profile() {
+    local profile=$1
+    local token=""
+    local base_url=""
+    local model=""
+    local opus_model=""
+    local sonnet_model=""
+    local haiku_model=""
+    local subagent_model=""
+    local effort_level=""
+
+    case "$profile" in
+        anthropic )
+            token=$(first_value CLAUDE_ANTHROPIC_API_KEY ANTHROPIC_API_KEY || true)
+            base_url=$(first_value CLAUDE_ANTHROPIC_BASE_URL ANTHROPIC_BASE_URL || true)
+            model=$(first_value CLAUDE_ANTHROPIC_MODEL ANTHROPIC_MODEL || true)
+
+            if [ -z "$token" ]; then
+                echo "Missing CLAUDE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY in $SECRETS_FILE"
+                return 1
+            fi
+            write_env_profile "$profile" api_key "$token" "$base_url" "$model" "$opus_model" "$sonnet_model" "$haiku_model" "$subagent_model" "$effort_level"
+            ;;
+        kimi )
+            token=$(first_value KIMI_API_KEY || true)
+            base_url=$(first_value KIMI_ANTHROPIC_BASE_URL || true)
+            model=$(first_value KIMI_ANTHROPIC_MODEL KIMI_MODEL || true)
+            opus_model=$(first_value KIMI_ANTHROPIC_DEFAULT_OPUS_MODEL || true)
+            sonnet_model=$(first_value KIMI_ANTHROPIC_DEFAULT_SONNET_MODEL || true)
+            haiku_model=$(first_value KIMI_ANTHROPIC_DEFAULT_HAIKU_MODEL || true)
+            subagent_model=$(first_value KIMI_CLAUDE_CODE_SUBAGENT_MODEL || true)
+            effort_level=$(first_value KIMI_CLAUDE_CODE_EFFORT_LEVEL || true)
+
+            if [ -z "$token" ] || [ -z "$base_url" ]; then
+                echo "Missing KIMI_API_KEY or KIMI_ANTHROPIC_BASE_URL in $SECRETS_FILE"
+                return 1
+            fi
+            write_env_profile "$profile" auth_token "$token" "$base_url" "$model" "$opus_model" "$sonnet_model" "$haiku_model" "$subagent_model" "$effort_level"
+            ;;
+        deepseek )
+            token=$(first_value DEEPSEEK_API_KEY ANTHROPIC_AUTH_TOKEN || true)
+            base_url=$(first_value DEEPSEEK_ANTHROPIC_BASE_URL ANTHROPIC_BASE_URL || true)
+            model=$(first_value DEEPSEEK_ANTHROPIC_MODEL DEEPSEEK_MODEL ANTHROPIC_MODEL || true)
+            opus_model=$(first_value DEEPSEEK_ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL || true)
+            sonnet_model=$(first_value DEEPSEEK_ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL || true)
+            haiku_model=$(first_value DEEPSEEK_ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL || true)
+            subagent_model=$(first_value DEEPSEEK_CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_SUBAGENT_MODEL || true)
+            effort_level=$(first_value DEEPSEEK_CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_EFFORT_LEVEL || true)
+
+            if [ -z "$token" ] || [ -z "$base_url" ]; then
+                echo "Missing DEEPSEEK_API_KEY or DEEPSEEK_ANTHROPIC_BASE_URL in $SECRETS_FILE"
+                return 1
+            fi
+            write_env_profile "$profile" auth_token "$token" "$base_url" "$model" "$opus_model" "$sonnet_model" "$haiku_model" "$subagent_model" "$effort_level"
+            ;;
+        * )
+            return 2
+            ;;
+    esac
+}
+
+print_env_profiles() {
+    echo "Built-in profiles from secrets:"
+    echo "  anthropic  requires CLAUDE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY"
+    echo "  kimi       requires KIMI_API_KEY and KIMI_ANTHROPIC_BASE_URL"
+    echo "  deepseek   requires DEEPSEEK_API_KEY and DEEPSEEK_ANTHROPIC_BASE_URL"
+}
+
+show_current() {
+    if [ ! -f "$CURRENT_CONFIG" ]; then
+        echo "Current config not found: $CURRENT_CONFIG"
+        return 1
+    fi
+
+    echo "Current config: $CURRENT_CONFIG"
+    print_config_summary "$CURRENT_CONFIG"
+}
+
+list_profiles() {
+    collect_profiles
+
+    if [ "${#profiles[@]}" -eq 0 ]; then
+        echo "No profiles found in $CLAUDE_DIR"
+        echo "Expected files: settings_<name>.json"
+        echo
+        print_env_profiles
+        return 1
+    fi
+
+    local i=1
+    local config
+    for config in "${profiles[@]}"; do
+        echo "[$i] $(profile_name "$config")"
+        print_config_summary "$config"
+        echo
+        i=$((i + 1))
+    done
+
+    print_env_profiles
+}
+
+select_profile() {
+    local choice=$1
+    local selected=""
+
+    collect_profiles
+    if [ "${#profiles[@]}" -eq 0 ]; then
+        case "$choice" in
+            anthropic | kimi | deepseek )
+                switch_env_profile "$choice"
+                return $?
+                ;;
+        esac
+
+        echo "No profiles found in $CLAUDE_DIR"
+        echo "Expected files: settings_<name>.json"
+        return 1
+    fi
+
+    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+        if [ "$choice" -ge 1 ] && [ "$choice" -le "${#profiles[@]}" ]; then
+            selected=${profiles[$((choice - 1))]}
+        fi
+    elif [ -f "$choice" ]; then
+        selected=$choice
+    elif [ -f "$CLAUDE_DIR/settings_$choice.json" ]; then
+        selected="$CLAUDE_DIR/settings_$choice.json"
+    fi
+
+    if [ -z "$selected" ]; then
+        case "$choice" in
+            anthropic | kimi | deepseek )
+                switch_env_profile "$choice"
+                return $?
+                ;;
+        esac
+
+        echo "Unknown profile: $choice"
+        echo
+        list_profiles
+        return 1
+    fi
+
+    backup_current
+    cp "$selected" "$CURRENT_CONFIG"
+    chmod 600 "$CURRENT_CONFIG"
+    echo "Switched Claude Code profile: $(profile_name "$selected")"
+    print_config_summary "$CURRENT_CONFIG"
+    echo "Restart Claude Code to apply."
+}
+
+interactive_select() {
+    list_profiles
+    printf "Select profile [1-%s] (q to quit): " "${#profiles[@]}"
+    read -r choice
+
+    if [ "$choice" = "q" ]; then
+        echo "Cancelled."
+        return 0
+    fi
+
+    select_profile "$choice"
+}
+
+case "${1:-}" in
+    "" )
+        interactive_select
+        ;;
+    list | ls | -l | --list )
+        list_profiles
+        ;;
+    current | status | -s | --status )
+        show_current
+        ;;
+    help | -h | --help )
+        echo "Usage: claude-switch [list|current|<profile>|<index>|<settings.json>]"
+        echo
+        echo "Profiles are stored as: $CLAUDE_DIR/settings_<name>.json"
+        echo "Examples:"
+        echo "  claude-switch list"
+        echo "  claude-switch anthropic"
+        echo "  claude-switch kimi"
+        echo "  claude-switch deepseek"
+        echo "  claude-switch 1"
+        ;;
+    * )
+        select_profile "$1"
+        ;;
+esac

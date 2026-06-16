@@ -1,0 +1,12 @@
+# =============================================================================
+# 00-core — macOS-specific
+# =============================================================================
+
+# bash-completion (Homebrew paths)
+if ! shopt -oq posix; then
+  if [ -f /opt/homebrew/etc/profile.d/bash_completion.sh ]; then
+    . /opt/homebrew/etc/profile.d/bash_completion.sh
+  elif [ -f /usr/local/etc/profile.d/bash_completion.sh ]; then
+    . /usr/local/etc/profile.d/bash_completion.sh
+  fi
+fi

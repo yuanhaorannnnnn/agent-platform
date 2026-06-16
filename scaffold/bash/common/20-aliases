@@ -1,0 +1,28 @@
+# =============================================================================
+# 20-aliases — All aliases, categorized
+# =============================================================================
+
+# --- File listing (modern) --------------------------------------------------
+alias ls="eza --icons --git"
+alias ll="eza -al --icons --git"
+alias la="eza -a --icons --git"
+
+# --- Git shortcuts ----------------------------------------------------------
+alias sts="git status"
+alias pul="git pull"
+alias 42="git checkout sprint42"
+alias 43="git checkout sprint43"
+
+# --- System utils -----------------------------------------------------------
+alias kj="kill -9 %%"
+alias kjsoft='PID=$(jobs -l | awk '\''END{print $2}'\'' | sed '\''s/\[//g'\'' | sed '\''s/\]//g'\''); if [ -n "$PID" ]; then kill -15 $PID; COUNT=0; while [[ $(ps -p $PID | wc -l) -gt 1 ]] && [[ $COUNT -lt 1 ]]; do sleep 1; ((COUNT++)); done; if [[ $(ps -p $PID | wc -l) -gt 1 ]]; then echo "进程未能正常退出，将使用kill -9强制终止"; kill -9 $PID; fi; fi'
+alias c75="sudo chmod -R 755 ./*"
+
+# --- Config reload ----------------------------------------------------------
+alias src="source ~/.bashrc"
+alias bs="zed ~/.bashrc"
+alias cs="clear"
+alias reher="herdr server reload-config"
+
+# --- Tools ------------------------------------------------------------------
+alias codex-up="npm i -g @openai/codex@latest"

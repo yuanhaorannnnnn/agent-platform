@@ -1,0 +1,64 @@
+# ~/.bashrc
+# =============================================================================
+# Modular bash configuration — OS-aware layered architecture
+#   common/  → cross-platform (always loaded)
+#   linux/   → Linux-specific (loaded on Linux)
+#   mac/     → macOS-specific (loaded on Darwin)
+# =============================================================================
+
+# --- nvm (loaded unconditionally — needed by non-interactive shells) ---------
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ] && ! type nvm >/dev/null 2>&1; then
+    \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    export NVM_AUTO_USE=1
+fi
+
+# If not running interactively, skip the rest (aliases, prompts, etc.)
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
+# --- readlink -f polyfill (GNU/BSD compatible) -------------------------------
+readlink_f() {
+    local target="$1"
+    if command -v greadlink >/dev/null 2>&1; then
+        greadlink -f "$target"
+    elif readlink -f / >/dev/null 2>&1; then
+        readlink -f "$target"
+    else
+        python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$target"
+    fi
+}
+
+# --- resolve repo root -------------------------------------------------------
+DOTFILES_DIR="$(cd "$(dirname "$(readlink_f "${BASH_SOURCE[0]}")")" && pwd)"
+OS="$(uname -s)"
+unset readlink_f
+
+# --- common modules (all platforms) ------------------------------------------
+for mod in "$DOTFILES_DIR/common/"[0-9][0-9]-*; do
+    [ -f "$mod" ] && source "$mod"
+done
+
+# --- OS-specific modules -----------------------------------------------------
+case "$OS" in
+    Linux)
+        for mod in "$DOTFILES_DIR/linux/"[0-9][0-9]-*; do
+            [ -f "$mod" ] && source "$mod"
+        done
+        ;;
+    Darwin)
+        for mod in "$DOTFILES_DIR/mac/"[0-9][0-9]-*; do
+            [ -f "$mod" ] && source "$mod"
+        done
+        ;;
+esac
+
+# --- secrets (untracked) -----------------------------------------------------
+[ -f "$DOTFILES_DIR/secrets" ] && source "$DOTFILES_DIR/secrets"
+
+# opencode
+export PATH=/home/yhr/.opencode/bin:$PATH
+export PATH="$HOME/.local/bin:$PATH"

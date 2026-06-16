@@ -1,0 +1,41 @@
+# =============================================================================
+# 40-tools — Third-party tool initializations
+# =============================================================================
+
+# --- Google Cloud SDK -------------------------------------------------------
+if [ -f "$HOME/software/google-cloud-sdk/path.bash.inc" ]; then
+    . "$HOME/software/google-cloud-sdk/path.bash.inc"
+fi
+if [ -f "$HOME/software/google-cloud-sdk/completion.bash.inc" ]; then
+    . "$HOME/software/google-cloud-sdk/completion.bash.inc"
+fi
+
+# --- FZF (portable detection) -----------------------------------------------
+_fzf_init() {
+    # Homebrew (Apple Silicon)
+    if [ -f /opt/homebrew/opt/fzf/shell/key-bindings.bash ]; then
+        source /opt/homebrew/opt/fzf/shell/key-bindings.bash
+        return 0
+    fi
+    # Homebrew (Intel)
+    if [ -f /usr/local/opt/fzf/shell/key-bindings.bash ]; then
+        source /usr/local/opt/fzf/shell/key-bindings.bash
+        return 0
+    fi
+    # Debian/Ubuntu
+    if [ -f /usr/share/doc/fzf/examples/key-bindings.bash ]; then
+        source /usr/share/doc/fzf/examples/key-bindings.bash
+        return 0
+    fi
+    return 1
+}
+_fzf_init && unset _fzf_init
+
+# --- Starship prompt --------------------------------------------------------
+command -v starship >/dev/null 2>&1 && eval "$(starship init bash)"
+
+# --- Zoxide -----------------------------------------------------------------
+command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init bash)"
+
+# --- Direnv ------------------------------------------------------------------
+command -v direnv >/dev/null 2>&1 && export DIRENV_LOG_FORMAT="" && eval "$(direnv hook bash)"

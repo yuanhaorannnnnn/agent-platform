@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+_readlink_f() {
+    if command -v greadlink >/dev/null 2>&1; then greadlink -f "$1"
+    elif readlink -f / >/dev/null 2>&1; then readlink -f "$1"
+    else python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$1"
+    fi
+}
+SCAFFOLD_DIR="$(cd "$(dirname "$(_readlink_f "$0")")/.." && pwd)"
+unset _readlink_f
+BINDIR="${MY_BINDIR:-$HOME/.local/bin}"
+ALL=true
+SHOW_ALIAS=false; SHOW_FUNC=false; SHOW_SCRIPT=false; SHOW_SVC=false; SHOW_CRON=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --alias|-a)  ALL=false; SHOW_ALIAS=true ;;
+        --func|-f)   ALL=false; SHOW_FUNC=true ;;
+        --script|-s) ALL=false; SHOW_SCRIPT=true ;;
+        --svc|-v)    ALL=false; SHOW_SVC=true ;;
+        --cron|-r)   ALL=false; SHOW_CRON=true ;;
+        -h|--help)   echo "Usage: my [--alias|-a] [--func|-f] [--script|-s] [--svc|-v] [--cron|-r]"; exit 0 ;;
+        *)           echo "Unknown: $arg" >&2; exit 1 ;;
+    esac
+done
+
+if $ALL; then SHOW_ALIAS=true; SHOW_FUNC=true; SHOW_SCRIPT=true; SHOW_SVC=true; SHOW_CRON=true; fi
+
+_src() {
+    for d in common linux mac; do
+        local f="$SCAFFOLD_DIR/bash/$d/$1"
+        [ -f "$f" ] && cat "$f"
+    done
+}
+
+# --- alias ---
+if $SHOW_ALIAS; then
+    echo "=== alias ==="
+    _src 20-aliases | grep '^alias ' | sed 's/^alias //' | sort -u
+    echo ""
+fi
+
+# --- function ---
+if $SHOW_FUNC; then
+    echo "=== function ==="
+    _src 30-functions | grep '^[a-zA-Z_][a-zA-Z0-9_]*()' | sed 's/()//; s/ *{.*//' | sort -u
+    echo ""
+fi
+
+# --- script ---
+if $SHOW_SCRIPT; then
+    echo "=== script ==="
+    bash "$SCAFFOLD_DIR/bin/audit-bin" "$BINDIR" 2>/dev/null | tail -n +4 | grep CUSTOM || echo "  (none)"
+    echo ""
+fi
+
+# --- systemd ---
+if $SHOW_SVC; then
+    echo "=== systemd service ==="
+    _svcdir() { find "$HOME"/.config/systemd/user "$HOME"/.local/share/systemd/user -name "*.service" -type f 2>/dev/null; }
+    if [ "$(uname -s)" = "Darwin" ]; then
+        echo "  (N/A — macOS uses launchd, not systemd)"
+    elif [ -n "$(_svcdir)" ]; then
+        # Build port lookup from ss (available without sudo for user processes)
+        _ports() { ss -tlnp 2>/dev/null | sed -n 's/.*:\([0-9]\+\)\s.*pid=\([0-9]\+\).*/\2:\1/p'; }
+        for f in $(_svcdir | sort); do
+            date="$(stat -c '%y' "$f" 2>/dev/null | cut -d. -f1 || stat -f '%Sm' -t '%F %R' "$f")"
+            # Try to find port: extract script path from ExecStart, match against process
+            port=""
+            if command -v ss >/dev/null 2>&1; then
+                # Extract last path component from ExecStart (the script/binary being run)
+                script=$(sed -n 's/^ExecStart=\/usr\/bin\/env\s\+\S\+\s\+//p; s/^ExecStart=\S\+\s\+//p; s/^ExecStart=//p' "$f" 2>/dev/null | awk '{print $1}' | head -1)
+                [ -n "$script" ] || script=$(basename "$f" .service)
+                for pid_port in $(_ports); do
+                    pid="${pid_port%:*}" p="${pid_port#*:}"
+                    if ps -p "$pid" -o cmd --no-headers 2>/dev/null | grep -qF "$script"; then
+                        port="$p"
+                        break
+                    fi
+                done
+            fi
+            [ -n "$port" ] && port="  :$port"
+            printf "%-16s  %s%s\n" "$date" "$f" "$port"
+        done | sort -r
+    else
+        echo "  (none)"
+    fi
+    echo ""
+fi
+
+# --- crontab + systemd timers ---
+if $SHOW_CRON; then
+    echo "=== scheduled tasks ==="
+    _cron=""
+    if crontab -l >/dev/null 2>&1; then
+        _cron=$(crontab -l 2>/dev/null | grep -v '^#' | grep -v '^$' | grep -v '^[A-Z]' || true)
+    fi
+    if [ -n "$_cron" ]; then
+        echo "  [crontab]"
+        echo "$_cron" | while read -r line; do
+            printf "    %s\n" "$line"
+        done
+    else
+        echo "  [crontab] (none)"
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        _timers=$(systemctl --user list-timers --no-legend 2>/dev/null | grep -v '^$' || true)
+        if [ -n "$_timers" ]; then
+            echo "  [systemd timers]"
+            echo "$_timers" | while read -r line; do
+                printf "    %s\n" "$line"
+            done
+        fi
+    fi
+    echo ""
+fi

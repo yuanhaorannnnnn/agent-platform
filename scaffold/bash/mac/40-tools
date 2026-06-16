@@ -1,0 +1,26 @@
+# =============================================================================
+# 40-tools — macOS-specific
+# =============================================================================
+
+# --- Tool check (warn once per session) -------------------------------------
+_scaffold_tool_warn() {
+    local missing=""
+    for tool in eza fzf starship zoxide; do
+        command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+    done
+    if [ -n "$missing" ]; then
+        echo "  ⚠️  Missing tools:$missing" >&2
+        echo "     brew install${missing}" >&2
+    fi
+    unset _scaffold_tool_warn
+}
+_scaffold_tool_warn
+
+# --- Conda ------------------------------------------------------------------
+if [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
+    . "$HOME/anaconda3/etc/profile.d/conda.sh"
+elif [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+    . "$HOME/miniconda3/etc/profile.d/conda.sh"
+elif [ -f "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh" ]; then
+    . "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh"
+fi

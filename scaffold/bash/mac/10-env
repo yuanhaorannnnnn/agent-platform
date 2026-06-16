@@ -1,0 +1,11 @@
+# =============================================================================
+# 10-env — macOS-specific environment & PATH
+# =============================================================================
+
+# Homebrew (Apple Silicon)
+add_path /opt/homebrew/bin
+add_path /opt/homebrew/sbin
+
+# Homebrew (Intel fallback)
+add_path /usr/local/bin
+add_path /usr/local/sbin

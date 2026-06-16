@@ -1,0 +1,26 @@
+# =============================================================================
+# 10-env — Environment variables & PATH
+# Uses add_path() to prevent duplicates
+# =============================================================================
+
+# --- PATH helper (prepend, no duplicates) ------------------------------------
+add_path() {
+    case ":$PATH:" in
+        *":$1:"*) ;;
+        *) PATH="$1:$PATH" ;;
+    esac
+}
+
+# --- User local bin ---------------------------------------------------------
+add_path "$HOME/.local/bin"
+
+# --- Editor -----------------------------------------------------------------
+export EDITOR="zed --wait"
+export VISUAL="$EDITOR"
+
+# --- NVM (first-time init only; update guard in bashrc top if changing) -----
+export NVM_DIR="$HOME/.nvm"
+if ! type nvm >/dev/null 2>&1; then
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+fi

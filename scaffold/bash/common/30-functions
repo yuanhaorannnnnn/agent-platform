@@ -1,0 +1,152 @@
+# =============================================================================
+# 30-functions — Custom bash functions
+# =============================================================================
+
+# --- Proxy toggle -----------------------------------------------------------
+proxy() {
+    export http_proxy="http://127.0.0.1:7890"
+    export https_proxy="http://127.0.0.1:7890"
+    echo "HTTP Proxy On"
+}
+
+noproxy() {
+    unset http_proxy
+    unset https_proxy
+    echo "HTTP Proxy off"
+}
+
+# --- Tar + zip packer -------------------------------------------------------
+tp() {
+    if [ -z "$1" ]; then
+        echo "Usage: tp <folder> [name]"
+        return 1
+    fi
+
+    local folder="${1%/}"
+    local name="${2:-$(basename "$folder")}"
+    local tarfile="$name.tar.gz"
+    local zipfile="$name.zip"
+
+    tar -czvf "$tarfile" "$folder" || return 1
+    zip "$zipfile" "$tarfile" || return 1
+    rm -f "$tarfile"
+    chmod 755 "$zipfile"
+    echo "$zipfile"
+}
+
+# --- Git branch hopper ------------------------------------------------------
+g-() {
+    local n=${1:-1}
+    [[ $n =~ ^[0-9]+$ ]] || { echo "Usage: g- [number]"; return 1; }
+    git switch @{-"$n"}
+}
+
+# --- Git timeline (two-branch merge-base view) ------------------------------
+git_timeline2() {
+    local A="$1"
+    local B="$2"
+    local BASE
+
+    BASE=$(git merge-base "$A" "$B") || return 1
+
+    echo "A: $A"
+    git show --oneline --decorate --no-patch "$A"
+    echo
+    echo "B: $B"
+    git show --oneline --decorate --no-patch "$B"
+    echo
+    echo "共同祖先:"
+    git show --oneline --decorate --no-patch "$BASE"
+    echo
+    echo "时间线:"
+    git log --graph --oneline --decorate --date-order --boundary \
+        "$A" "$B" --not "$BASE^"
+}
+
+# --- OpenCV pixel reader ----------------------------------------------------
+pix() {
+    if [ -z "${3:-}" ]; then
+        echo "Usage: pix <image> <x> <y>"
+        return 1
+    fi
+    python3 -c "import cv2; img=cv2.imread('$1', cv2.IMREAD_UNCHANGED); print(img[$3,$2])"
+}
+
+# --- Docker cleanup (interactive) -------------------------------------------
+docker-clean() {
+    echo "========== Docker Disk Usage =========="
+    docker system df
+    echo
+
+    echo "========== Matching Containers =========="
+    docker ps -a --filter name=oasis_calra
+    echo
+
+    echo "========== Matching Images =========="
+    docker images | grep '^carlaue5'
+    echo
+
+    read -p "⚠️  Proceed with FULL cleanup? (y/N): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "❌ Cancelled."
+        return
+    fi
+
+    echo "🚀 Cleaning..."
+    docker ps -aq --filter name=oasis_calra | xargs -r docker rm -f
+    docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk '$1 ~ /^carlaue5:/ {print $2}' | xargs -r docker rmi -f
+    docker system prune -f --volumes
+
+    echo
+    echo "========== After Cleanup =========="
+    docker system df
+}
+
+# --- Docker cleanup (non-interactive, carlaue5 only) -------------------------
+docker-clean-carla() {
+    echo "Cleaning carlaue5 images..."
+    docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | awk '$1 ~ /^carlaue5:/ {print $2}' | xargs -r docker rmi -f
+    docker image prune -f
+    echo "Done."
+}
+
+# --- tmux session helpers ----------------------------------------------------
+_tmux_session_name() {
+    local session="${1:-$(basename "$PWD")}"
+    session="${session//[^A-Za-z0-9_.-]/_}"
+
+    if [ -z "$session" ]; then
+        echo "Usage: ta|tn|tk [session-name]" >&2
+        return 1
+    fi
+
+    printf '%s\n' "$session"
+}
+
+ta() {
+    local session
+    session="$(_tmux_session_name "${1:-}")" || return 1
+    tmux attach -t "$session"
+}
+
+tn() {
+    local session
+    session="$(_tmux_session_name "${1:-}")" || return 1
+    tmux new -s "$session"
+}
+
+tk() {
+    local session
+    session="$(_tmux_session_name "${1:-}")" || return 1
+    tmux kill-session -t "$session"
+}
+
+# --- git add + commit + push -------------------------------------------------
+gacp() {
+    local msg="${1:-}"
+    if [ -z "$msg" ]; then
+        echo "Usage: gacp <commit-message>"
+        return 1
+    fi
+    git add -u && git commit -m "$msg" && git push
+}

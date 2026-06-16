@@ -1,0 +1,465 @@
+#!/usr/bin/env python3
+"""
+agent-clean — audit & clean coding-agent sessions.
+
+Usage:
+  agent-clean              audit only
+  agent-clean --clean      audit + interactive delete
+  agent-clean --clean -y   audit + non-interactive delete
+  agent-clean --html       audit + open HTML dashboard (fresh from scan)
+"""
+import os, sys, json, time, glob, shutil, subprocess
+
+DAYS = int(os.environ.get("AGENT_CLEAN_DAYS", "90"))
+HOME = os.path.expanduser("~")
+TARGETS = {"orphan": [], "empty": [], "stale": [], "unknown": []}
+REPORT_DATA = {}  # collected for --html generation
+
+
+def decode_claude_path(name, _session_dir=None):
+    inner = name[1:]
+    parts = inner.split("-")
+    stack = [("/", 0)]
+    while stack:
+        prefix, idx = stack.pop()
+        if idx >= len(parts):
+            prefix = prefix.rstrip("/")
+            if os.path.isdir(prefix):
+                return prefix
+            continue
+        for j in range(idx + 1, len(parts) + 1):
+            comp = "-".join(parts[idx:j])
+            for variant in (comp, comp.replace("-", "_")):
+                cand = prefix + variant
+                if os.path.isdir(cand):
+                    stack.append((cand + "/", j))
+    return None
+
+
+def decode_pi_path(name, session_dir):
+    """Decode Pi session path: try directory name decode, fall back to JSONL cwd."""
+    # Strategy 1: decode dir name (works when path has no hyphens)
+    inner = name[2:-2]
+    cand = "/" + inner.replace("-", "/")
+    if os.path.isdir(cand):
+        return cand
+
+    # Strategy 2: read cwd from the first session JSONL
+    files = sorted(glob.glob(os.path.join(session_dir, "*.jsonl")))
+    for f in files:
+        try:
+            with open(f) as fh:
+                for line in fh:
+                    d = json.loads(line.strip())
+                    if d.get("type") == "session" and d.get("cwd"):
+                        cwd = d["cwd"]
+                        if os.path.isdir(cwd):
+                            return cwd
+                    break  # only check first record of first file
+        except Exception:
+            continue
+
+    return None
+
+
+def size_iec(b):
+    for u in ["B", "K", "M", "G"]:
+        if b < 1024:
+            return f"{b}{u}"
+        b //= 1024
+    return f"{b}T"
+
+
+def is_empty_session(filepath):
+    """Empty = no substantive assistant/tool activity AND few user messages."""
+    try:
+        user_count = 0
+        assistant_events = 0
+        tool_events = 0
+        total_records = 0
+        first_content = ""
+        with open(filepath) as f:
+            for line in f:
+                total_records += 1
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                t = d.get("type", "")
+                if t == "user":
+                    user_count += 1
+                    if user_count == 1:
+                        first_content = str(d.get("content", "")).strip()
+                elif t == "assistant":
+                    assistant_events += 1
+                elif t in ("tool_use", "tool_result"):
+                    tool_events += 1
+                if user_count > 3 or assistant_events > 2 or tool_events > 0:
+                    return False
+
+        # Truly empty: few records, no substantive work, trivial first message
+        return (user_count <= 2 and len(first_content) <= 5
+                and assistant_events <= 1 and tool_events == 0
+                and total_records < 100)
+    except Exception:
+        return False
+
+
+def is_empty_pi(filepath):
+    """Empty Pi session: tiny file with no assistant or tool events."""
+    size = os.path.getsize(filepath)
+    if size >= 5120:
+        return False
+    try:
+        with open(filepath) as f:
+            for line in f:
+                try:
+                    d = json.loads(line.strip())
+                except json.JSONDecodeError:
+                    continue
+                t = d.get("type", "")
+                if t in ("assistant", "tool_use", "tool_result"):
+                    return False
+        return True
+    except Exception:
+        return size < 5120
+
+
+def scan_dir(title, root, prefix_filter, path_decoder, empty_fn=None, exclude_subagents=False):
+    if not os.path.isdir(root):
+        return []
+    print(f"\n=== {title} ===")
+    rows = []
+    for name in sorted(os.listdir(root)):
+        d = os.path.join(root, name)
+        if not os.path.isdir(d) or not name.startswith(prefix_filter):
+            continue
+        files = glob.glob(os.path.join(d, "*.jsonl"))
+        if exclude_subagents:
+            files = [f for f in files if "/subagents/" not in f]
+        if not files:
+            continue
+        count = len(files)
+        size = sum(os.path.getsize(f) for f in files)
+        latest = max(os.path.getmtime(f) for f in files)
+        age = int((time.time() - latest) / 86400)
+        if path_decoder:
+            path = path_decoder(name, d)
+        else:
+            path = None
+        check_empty = empty_fn if empty_fn else is_empty_session
+        empty_count = sum(1 for f in files if check_empty(f))
+        empty_files = [f for f in files if check_empty(f)]
+        rows.append((name, d, count, size, age, path, empty_files))
+
+    for name, d, count, size, age, path, empty_files in rows:
+        tags = []
+        if path is None:
+            tags.append("UNKNOWN")
+            TARGETS["unknown"].append(d)
+        elif not os.path.isdir(path):
+            tags.append("ORPHAN")
+            TARGETS["orphan"].append(d)
+        elif age > DAYS:
+            tags.append(f"STALE({age}d)")
+            TARGETS["stale"].append(d)
+        if empty_files:
+            tags.append(f"EMPTY({len(empty_files)})")
+            for ef in empty_files:
+                TARGETS["empty"].append(ef)
+        tag = ",".join(tags) if tags else "OK"
+        print(f"  [{tag:<16}] {name:<55} {count:3d} files  {size_iec(size):>6}  {age:3d}d")
+
+    total_s = sum(r[2] for r in rows)
+    total_b = sum(r[3] for r in rows)
+    orphan = sum(1 for r in rows if r[5] is not None and not os.path.isdir(r[5]))
+    unknown = sum(1 for r in rows if r[5] is None)
+    stale = sum(1 for r in rows if r[5] is not None and os.path.isdir(r[5]) and r[4] > DAYS)
+    empty = sum(len(r[6]) for r in rows)
+    print(f"  {'─'*75}")
+    parts = [f"sessions: {total_s}, size: {size_iec(total_b)}"]
+    if orphan: parts.append(f"orphaned: {orphan}")
+    if unknown: parts.append(f"unknown: {unknown}")
+    if empty:  parts.append(f"empty: {empty}")
+    if stale:  parts.append(f"stale (>{DAYS}d): {stale}")
+    print(f"  {', '.join(parts)}")
+
+    # Collect for HTML
+    REPORT_DATA[title] = {
+        "rows": [{"name": r[0], "count": r[2], "size": size_iec(r[3]), "age": r[4],
+                   "path": r[5], "empty_files": len(r[6])} for r in rows],
+        "total_s": total_s, "total_b": size_iec(total_b),
+        "orphan": orphan, "unknown": unknown, "empty": empty, "stale": stale
+    }
+    return rows
+
+
+def scan_codex():
+    idx_file = os.path.join(HOME, ".codex/session_index.jsonl")
+    sessions_root = os.path.join(HOME, ".codex/sessions")
+    if not os.path.isfile(idx_file):
+        return
+    print("\n=== Codex ===")
+    id_to_file = {}
+    for dp, _, fns in os.walk(sessions_root):
+        for fn in fns:
+            if not fn.endswith(".jsonl"):
+                continue
+            parts = fn.rsplit("-", 5)
+            if len(parts) >= 5:
+                sid = "-".join(parts[-5:]).replace(".jsonl", "")
+                if len(sid) > 20:
+                    fpath = os.path.join(dp, fn)
+                    if sid not in id_to_file or os.path.getmtime(fpath) > os.path.getmtime(id_to_file[sid]):
+                        id_to_file[sid] = fpath
+    rows = []
+    with open(idx_file) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            sid = d.get("id", "")
+            updated = d.get("updated_at", "")
+            name = d.get("thread_name", "?")
+            if not sid or not updated:
+                continue
+            try:
+                ts = time.mktime(time.strptime(updated[:19], "%Y-%m-%dT%H:%M:%S"))
+            except ValueError:
+                continue
+            age = int((time.time() - ts) / 86400)
+            fpath = id_to_file.get(sid)
+            size = os.path.getsize(fpath) if fpath else 0
+            rows.append((sid, name, size, age, fpath))
+
+    for sid, name, size, age, fpath in rows:
+        tag = f"STALE({age}d)" if age > DAYS else "OK"
+        if age > DAYS and fpath:
+            TARGETS["stale"].append(fpath)
+        print(f"  [{tag:<16}] {sid:<36} {name:<20} {size_iec(size):>6}  {age:3d}d")
+
+    total = len(rows)
+    total_b = sum(r[2] for r in rows)
+    stale = sum(1 for r in rows if r[3] > DAYS)
+    print(f"  {'─'*75}")
+    print(f"  sessions: {total}, size: {size_iec(total_b)}, stale (>{DAYS}d): {stale}")
+    REPORT_DATA["Codex"] = {
+        "rows": [{"name": r[1], "size": size_iec(r[2]), "age": r[3]} for r in rows],
+        "total_s": total, "total_b": size_iec(total_b), "stale": stale
+    }
+
+
+def do_clean(yes=False):
+    orphan, empty, stale, unknown = TARGETS["orphan"], TARGETS["empty"], TARGETS["stale"], TARGETS["unknown"]
+    if unknown:
+        print(f"\n⚠️  {len(unknown)} UNKNOWN items skipped (never auto-deleted).")
+    if not any([orphan, empty, stale]):
+        print("\nNothing to clean.")
+        return
+    print(f"\n── To delete ──")
+    total = 0
+    if orphan:
+        s = sum(os.path.getsize(d) if os.path.isdir(d) else 0 for d in orphan)
+        print(f"  {len(orphan)} orphaned dirs  ({size_iec(s)})")
+        for d in orphan:
+            print(f"    rm -rf {d}")
+        total += s
+    if empty:
+        s = sum(os.path.getsize(f) for f in empty if os.path.isfile(f))
+        print(f"  {len(empty)} empty files  ({size_iec(s)})")
+        for f in empty[:5]:
+            print(f"    rm {f}")
+        if len(empty) > 5:
+            print(f"    ... and {len(empty) - 5} more")
+        total += s
+    if stale:
+        s = 0
+        for d in stale:
+            if os.path.isdir(d):
+                s += sum(os.path.getsize(os.path.join(dp, fn)) for dp, _, fns in os.walk(d) for fn in fns)
+            elif os.path.isfile(d):
+                s += os.path.getsize(d)
+        print(f"  {len(stale)} stale items  ({size_iec(s)})")
+        total += s
+    print(f"  total: {size_iec(total)}")
+    if not yes:
+        try:
+            ans = input("\nDelete? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nCancelled.")
+            sys.exit(0)
+        if ans not in ("y", "yes"):
+            print("Cancelled.")
+            return
+    deleted = 0
+    for d in orphan:
+        if os.path.isdir(d):
+            shutil.rmtree(d); deleted += 1
+    for f in empty:
+        if os.path.isfile(f):
+            os.remove(f); deleted += 1
+    for d in stale:
+        if os.path.isdir(d):
+            shutil.rmtree(d); deleted += 1
+        elif os.path.isfile(d):
+            os.remove(d); deleted += 1
+    print(f"Deleted {deleted} items. Freed {size_iec(total)}.")
+
+
+def generate_html():
+    """Generate a fresh HTML report from the current scan data."""
+    import html as htm
+
+    now = time.strftime("%Y-%m-%d %H:%M")
+    total_sessions = sum(REPORT_DATA.get(k, {}).get("total_s", 0) for k in ("Claude Code", "Codex", "Pi"))
+    # Compute total disk from size strings
+    def parse_size(s):
+        m = {"B":1,"K":1024,"M":1048576,"G":1073741824}
+        if s and s[-1] in m:
+            return int(s[:-1]) * m[s[-1]] if s[:-1].isdigit() else 0
+        return int(s) if s and s.isdigit() else 0
+    total_bytes = sum(parse_size(REPORT_DATA.get(k, {}).get("total_b", "0")) for k in ("Claude Code", "Codex", "Pi"))
+
+    rows_html = ""
+    for section, cols in [
+        ("Claude Code", ["Project","Files","Size","Age","Status"]),
+        ("Codex", ["Session","Name","Size","Age","Status"]),
+        ("Pi", ["Project","Files","Size","Age","Status"]),
+    ]:
+        data = REPORT_DATA.get(section, {})
+        sr = data.get("rows", [])
+        total = data.get("total_s", len(sr))
+        stats = []
+        if data.get("orphan"): stats.append(str(data["orphan"]) + " orphan")
+        if data.get("unknown"): stats.append(str(data["unknown"]) + " unknown")
+        if data.get("empty"): stats.append(str(data["empty"]) + " empty")
+        stat_str = " · ".join(stats)
+        rows_html += f'<div class="runtime"><h2 onclick="this.parentElement.classList.toggle(\'collapsed\')"><span class="icon">▶</span> {section} <span class="count">{total} sessions{f" · {stat_str}" if stat_str else ""} · {data.get("total_b","?")}</span></h2><div class="rows">'
+        rows_html += '<div class="row head">' + "".join(f"<span>{c}</span>" for c in cols) + "</div>"
+        for r in sr[:40]:
+            name = htm.escape(str(r.get("name", "?")))
+            rsize = r.get("size", "-")
+            age = r.get("age", "?")
+            path = r.get("path")
+            emp = r.get("empty_files", 0)
+            # Determine status
+            status = "ok"
+            if path is None: status = "unknown"
+            elif path and not os.path.isdir(path): status = "orphan"
+            elif age > DAYS: status = "stale"
+            if emp > 0: status = f"{status},empty"
+            cls = "ok-row" if status == "ok" else "flag"
+            if "orphan" in status: cls += " flag-orphan"
+            if "empty" in status: cls += " flag-empty"
+            if "unknown" in status: cls += " flag-unknown"
+            badge = {"ok": "OK","orphan":"ORPHAN","stale":"STALE","empty":"EMPTY","unknown":"UNKNOWN","orphan,empty":"ORPHAN+EMPTY","unknown,empty":"UNKNOWN+EMPTY"}.get(status.split(",")[0], status.upper())
+            badge_cls = {"ok":"green","orphan":"red","stale":"gray","empty":"amber","unknown":"gray"}.get(status.split(",")[0], "gray")
+            emp_str = f" ·{emp}" if emp > 0 else ""
+            cols_html = f"<span class=\"proj\">{name}</span><span>{r.get('count','?')}</span><span>{rsize}</span><span>{age}d</span><span class=\"badge {badge_cls}\">{badge}{emp_str}</span>"
+            rows_html += f'<div class="row {cls}">{cols_html}</div>'
+        rows_html += "</div></div>"
+
+    orphan_c = sum(REPORT_DATA.get(k, {}).get("orphan", 0) for k in ("Claude Code", "Pi"))
+    empty_c = sum(REPORT_DATA.get(k, {}).get("empty", 0) for k in ("Claude Code", "Pi"))
+    unknown_c = sum(REPORT_DATA.get(k, {}).get("unknown", 0) for k in ("Claude Code", "Pi"))
+
+    html = f"""<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Agent Session Audit</title>
+<style>
+:root{{--canvas:#101010;--canvas-soft:#1a1a1a;--primary:#00d992;--ink:#f2f2f2;--body:#bdbdbd;--mute:#8b949e;--hairline:#3d3a39;--red:#f85149;--amber:#d2991d}}
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:var(--canvas);color:var(--ink);font:14px/1.6 system-ui,sans-serif;padding:48px 24px 80px;-webkit-font-smoothing:antialiased}}
+.page{{max-width:960px;margin:0 auto}}
+header{{border-bottom:1px solid var(--hairline);margin-bottom:32px;padding-bottom:16px}}
+header h1{{font-size:24px;font-weight:700}}
+header .meta{{font:13px monospace;color:var(--mute);margin-top:4px}}
+.cards{{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:32px}}
+.card{{background:var(--canvas);border:1px solid var(--hairline);border-radius:8px;padding:16px;text-align:center}}
+.card .num{{font:28px/1 monospace;font-weight:550;margin-bottom:8px}}
+.card .num.green{{color:var(--primary)}}.card .num.red{{color:var(--red)}}.card .num.amber{{color:var(--amber)}}
+.card .label{{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:2.52px;font-weight:600}}
+.toolbar{{display:flex;gap:8px;margin-bottom:24px}}
+.toolbar button{{background:var(--canvas);border:1px solid var(--hairline);border-radius:6px;color:var(--ink);padding:6px 14px;cursor:pointer;font:14px system-ui,sans-serif}}
+.toolbar button:hover{{border-color:var(--mute)}}
+.toolbar button.active{{background:var(--primary);color:var(--canvas);border-color:var(--primary)}}
+.runtime{{border:1px solid var(--hairline);border-radius:8px;overflow:hidden;margin-bottom:16px}}
+.runtime h2{{font:14px/1 system-ui,sans-serif;font-weight:600;padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--hairline)}}
+.runtime h2 .icon{{font-size:14px;display:inline-block;transition:transform .2s;transform:rotate(90deg)}}
+.runtime.collapsed h2 .icon{{transform:rotate(0deg)}}
+.runtime.collapsed .rows{{display:none}}
+.runtime.collapsed h2{{border-bottom:none}}
+.runtime h2 .count{{color:var(--mute);font:13px monospace;margin-left:auto}}
+.row{{display:grid;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hairline);font-size:14px}}
+.row:last-child{{border-bottom:none}}
+.row.head{{background:var(--canvas-soft);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:2.52px;color:var(--mute);padding:8px 16px}}
+.row:hover{{background:var(--canvas-soft)}}
+.row.head:hover{{background:var(--canvas-soft)}}
+.row .proj{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;font:12px monospace}}
+.flag{{display:none}}.flagged .flag{{display:grid}}.flagged .ok-row{{display:none}}
+.only-empty .ok-row{{display:none}}.only-empty .flag:not(.flag-empty){{display:none}}
+.only-orphan .ok-row{{display:none}}.only-orphan .flag:not(.flag-orphan){{display:none}}
+.badge{{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;border:1px solid var(--hairline)}}
+.badge.green{{color:var(--primary);border-color:var(--primary)}}
+.badge.red{{background:rgba(248,81,73,.15);color:var(--red);border-color:transparent}}
+.badge.amber{{background:rgba(210,153,29,.12);color:var(--amber);border-color:transparent}}
+.badge.gray{{color:var(--mute)}}
+footer{{margin-top:48px;padding-top:16px;border-top:1px solid var(--hairline);font:12px monospace;color:var(--mute)}}
+</style></head><body><div class="page">
+<header><h1>Agent Session Audit</h1><div class="meta">{now} · {DAYS}d threshold · live scan</div></header>
+<div class="cards">
+<div class="card"><div class="num">{size_iec(total_bytes)}</div><div class="label">Total Disk</div></div>
+<div class="card"><div class="num">{total_sessions}</div><div class="label">Sessions</div></div>
+<div class="card"><div class="num red">{orphan_c}</div><div class="label">Orphaned</div></div>
+<div class="card"><div class="num amber">{empty_c}</div><div class="label">Empty</div></div>
+<div class="card"><div class="num green">0</div><div class="label">Stale</div></div>
+</div>
+<div class="toolbar">
+<button onclick="document.querySelectorAll('.runtime').forEach(r=>{{r.classList.add('flagged');r.classList.remove('only-empty','only-orphan')}})">Only Flagged</button>
+<button onclick="document.querySelectorAll('.runtime').forEach(r=>{{r.classList.add('only-empty');r.classList.remove('flagged','only-orphan')}})">Only Empty</button>
+<button onclick="document.querySelectorAll('.runtime').forEach(r=>{{r.classList.add('only-orphan');r.classList.remove('flagged','only-empty')}})">Only Orphaned</button>
+<button onclick="document.querySelectorAll('.runtime').forEach(r=>r.classList.remove('flagged','only-empty','only-orphan'))">All</button>
+</div>
+{rows_html}
+<footer>Generated {now} · agent-clean --html · {DAYS}d threshold · UNKNOWN entries never auto-deleted</footer>
+</div></body></html>"""
+
+    outdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+    os.makedirs(outdir, exist_ok=True)
+    outpath = os.path.join(outdir, "agent-sessions.html")
+    with open(outpath, "w") as f:
+        f.write(html)
+    return outpath
+
+
+def open_report():
+    report = generate_html()
+    print(f"\nHTML report saved: {report}")
+    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    subprocess.run([opener, report])
+
+
+def main():
+    clean = False; yes = False; html = False
+    for a in sys.argv[1:]:
+        if a in ("--clean", "-c"): clean = True
+        elif a in ("-y", "--yes"): yes = True
+        elif a in ("--html", "-H"): html = True
+        elif a in ("-h", "--help"): print(__doc__); sys.exit(0)
+
+    print(f"agent-clean — {'clean' if clean else 'audit'} ({DAYS}d threshold)")
+    global REPORT_DATA
+    scan_dir("Claude Code", f"{HOME}/.claude/projects", "-",
+             decode_claude_path, empty_fn=is_empty_session, exclude_subagents=True)
+    scan_codex()
+    scan_dir("Pi", f"{HOME}/.pi/agent/sessions", "--",
+             decode_pi_path, empty_fn=is_empty_pi, exclude_subagents=False)
+    print()
+    if clean:
+        do_clean(yes=yes)
+    if html:
+        open_report()
+
+
+if __name__ == "__main__":
+    main()
