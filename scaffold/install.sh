@@ -1,10 +1,29 @@
 #!/usr/bin/env bash
 # =============================================================================
-# dotfiles/install.sh — Bootstrap symlinks
+# scaffold/install.sh — Bootstrap symlinks
+# =============================================================================
+# curl -fsSL https://raw.githubusercontent.com/yuanhaorannnnnn/scaffold/main/install.sh | bash
 # =============================================================================
 set -euo pipefail
 
+SCAFFOLD_REPO="https://github.com/yuanhaorannnnnn/scaffold.git"
+SCAFFOLD_HOME="${SCAFFOLD_HOME:-$HOME/scaffold}"
+
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ── Bootstrap: running from curl | bash, no local repo ──────────────────
+if [ ! -f "$REPO_DIR/bash/bashrc" ]; then
+    echo "📥 Bootstrapping scaffold → $SCAFFOLD_HOME"
+    if [ -d "$SCAFFOLD_HOME/.git" ]; then
+        echo "   Already cloned, updating..."
+        git -C "$SCAFFOLD_HOME" pull --ff-only origin main
+    else
+        mkdir -p "$(dirname "$SCAFFOLD_HOME")"
+        git clone --branch main "$SCAFFOLD_REPO" "$SCAFFOLD_HOME"
+    fi
+    exec bash "$SCAFFOLD_HOME/install.sh"
+    # NOTREACHED
+fi
 BASHRC_SRC="$REPO_DIR/bash/bashrc"
 BASHRC_DST="$HOME/.bashrc"
 BIN_DIR="$REPO_DIR/bin"
