@@ -307,13 +307,15 @@ def do_clean(yes=False):
     print(f"Deleted {deleted} items. Freed {size_iec(total)}.")
 
 
+def _template_path():
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports", "agent-sessions.template.html")
+
+
 def generate_html():
-    """Generate a fresh HTML report from the current scan data."""
     import html as htm
 
     now = time.strftime("%Y-%m-%d %H:%M")
     total_sessions = sum(REPORT_DATA.get(k, {}).get("total_s", 0) for k in ("Claude Code", "Codex", "Pi"))
-    # Compute total disk from size strings
     def parse_size(s):
         m = {"B":1,"K":1024,"M":1048576,"G":1073741824}
         if s and s[-1] in m:
@@ -343,7 +345,6 @@ def generate_html():
             age = r.get("age", "?")
             path = r.get("path")
             emp = r.get("empty_files", 0)
-            # Determine status
             status = "ok"
             if path is None: status = "unknown"
             elif path and not os.path.isdir(path): status = "orphan"
@@ -362,67 +363,15 @@ def generate_html():
 
     orphan_c = sum(REPORT_DATA.get(k, {}).get("orphan", 0) for k in ("Claude Code", "Pi"))
     empty_c = sum(REPORT_DATA.get(k, {}).get("empty", 0) for k in ("Claude Code", "Pi"))
-    unknown_c = sum(REPORT_DATA.get(k, {}).get("unknown", 0) for k in ("Claude Code", "Pi"))
 
-    html = f"""<!doctype html>
-<html lang="zh"><head><meta charset="utf-8"><title>Agent Session Audit</title>
-<style>
-:root{{--canvas:#101010;--canvas-soft:#1a1a1a;--primary:#00d992;--ink:#f2f2f2;--body:#bdbdbd;--mute:#8b949e;--hairline:#3d3a39;--red:#f85149;--amber:#d2991d}}
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:var(--canvas);color:var(--ink);font:14px/1.6 system-ui,sans-serif;padding:48px 24px 80px;-webkit-font-smoothing:antialiased}}
-.page{{max-width:960px;margin:0 auto}}
-header{{border-bottom:1px solid var(--hairline);margin-bottom:32px;padding-bottom:16px}}
-header h1{{font-size:24px;font-weight:700}}
-header .meta{{font:13px monospace;color:var(--mute);margin-top:4px}}
-.cards{{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:32px}}
-.card{{background:var(--canvas);border:1px solid var(--hairline);border-radius:8px;padding:16px;text-align:center}}
-.card .num{{font:28px/1 monospace;font-weight:550;margin-bottom:8px}}
-.card .num.green{{color:var(--primary)}}.card .num.red{{color:var(--red)}}.card .num.amber{{color:var(--amber)}}
-.card .label{{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:2.52px;font-weight:600}}
-.toolbar{{display:flex;gap:8px;margin-bottom:24px}}
-.toolbar button{{background:var(--canvas);border:1px solid var(--hairline);border-radius:6px;color:var(--ink);padding:6px 14px;cursor:pointer;font:14px system-ui,sans-serif}}
-.toolbar button:hover{{border-color:var(--mute)}}
-.toolbar button.active{{background:var(--primary);color:var(--canvas);border-color:var(--primary)}}
-.runtime{{border:1px solid var(--hairline);border-radius:8px;overflow:hidden;margin-bottom:16px}}
-.runtime h2{{font:14px/1 system-ui,sans-serif;font-weight:600;padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--hairline)}}
-.runtime h2 .icon{{font-size:14px;display:inline-block;transition:transform .2s;transform:rotate(90deg)}}
-.runtime.collapsed h2 .icon{{transform:rotate(0deg)}}
-.runtime.collapsed .rows{{display:none}}
-.runtime.collapsed h2{{border-bottom:none}}
-.runtime h2 .count{{color:var(--mute);font:13px monospace;margin-left:auto}}
-.row{{display:grid;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hairline);font-size:14px}}
-.row:last-child{{border-bottom:none}}
-.row.head{{background:var(--canvas-soft);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:2.52px;color:var(--mute);padding:8px 16px}}
-.row:hover{{background:var(--canvas-soft)}}
-.row.head:hover{{background:var(--canvas-soft)}}
-.row .proj{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;font:12px monospace}}
-.flag{{display:none}}.flagged .flag{{display:grid}}.flagged .ok-row{{display:none}}
-.only-empty .ok-row{{display:none}}.only-empty .flag:not(.flag-empty){{display:none}}
-.only-orphan .ok-row{{display:none}}.only-orphan .flag:not(.flag-orphan){{display:none}}
-.badge{{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;border:1px solid var(--hairline)}}
-.badge.green{{color:var(--primary);border-color:var(--primary)}}
-.badge.red{{background:rgba(248,81,73,.15);color:var(--red);border-color:transparent}}
-.badge.amber{{background:rgba(210,153,29,.12);color:var(--amber);border-color:transparent}}
-.badge.gray{{color:var(--mute)}}
-footer{{margin-top:48px;padding-top:16px;border-top:1px solid var(--hairline);font:12px monospace;color:var(--mute)}}
-</style></head><body><div class="page">
-<header><h1>Agent Session Audit</h1><div class="meta">{now} · {DAYS}d threshold · live scan</div></header>
-<div class="cards">
-<div class="card"><div class="num">{size_iec(total_bytes)}</div><div class="label">Total Disk</div></div>
-<div class="card"><div class="num">{total_sessions}</div><div class="label">Sessions</div></div>
-<div class="card"><div class="num red">{orphan_c}</div><div class="label">Orphaned</div></div>
-<div class="card"><div class="num amber">{empty_c}</div><div class="label">Empty</div></div>
-<div class="card"><div class="num green">0</div><div class="label">Stale</div></div>
-</div>
-<div class="toolbar">
-<button onclick="document.querySelectorAll('.runtime').forEach(r=>{{r.classList.add('flagged');r.classList.remove('only-empty','only-orphan')}})">Only Flagged</button>
-<button onclick="document.querySelectorAll('.runtime').forEach(r=>{{r.classList.add('only-empty');r.classList.remove('flagged','only-orphan')}})">Only Empty</button>
-<button onclick="document.querySelectorAll('.runtime').forEach(r=>{{r.classList.add('only-orphan');r.classList.remove('flagged','only-empty')}})">Only Orphaned</button>
-<button onclick="document.querySelectorAll('.runtime').forEach(r=>r.classList.remove('flagged','only-empty','only-orphan'))">All</button>
-</div>
-{rows_html}
-<footer>Generated {now} · agent-clean --html · {DAYS}d threshold · UNKNOWN entries never auto-deleted</footer>
-</div></body></html>"""
+    with open(_template_path(), encoding="utf-8") as f:
+        html = f.read().format(
+            now=now, days=DAYS,
+            total_disk=size_iec(total_bytes),
+            total_sessions=total_sessions,
+            orphan_c=orphan_c, empty_c=empty_c,
+            rows_html=rows_html,
+        )
 
     outdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
     os.makedirs(outdir, exist_ok=True)

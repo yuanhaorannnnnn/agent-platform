@@ -175,63 +175,34 @@ PY
 
 switch_env_profile() {
     local profile=$1
-    local token=""
-    local base_url=""
-    local model=""
-    local opus_model=""
-    local sonnet_model=""
-    local haiku_model=""
-    local subagent_model=""
-    local effort_level=""
+
+    # ponytail: data-driven profile config — add a profile by appending one line here
+    local auth_mode="" token_var_prefix="" required_vars=""
 
     case "$profile" in
-        anthropic )
-            token=$(first_value CLAUDE_ANTHROPIC_API_KEY ANTHROPIC_API_KEY || true)
-            base_url=$(first_value CLAUDE_ANTHROPIC_BASE_URL ANTHROPIC_BASE_URL || true)
-            model=$(first_value CLAUDE_ANTHROPIC_MODEL ANTHROPIC_MODEL || true)
-
-            if [ -z "$token" ]; then
-                echo "Missing CLAUDE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY in $SECRETS_FILE"
-                return 1
-            fi
-            write_env_profile "$profile" api_key "$token" "$base_url" "$model" "$opus_model" "$sonnet_model" "$haiku_model" "$subagent_model" "$effort_level"
-            ;;
-        kimi )
-            token=$(first_value KIMI_API_KEY || true)
-            base_url=$(first_value KIMI_ANTHROPIC_BASE_URL || true)
-            model=$(first_value KIMI_ANTHROPIC_MODEL KIMI_MODEL || true)
-            opus_model=$(first_value KIMI_ANTHROPIC_DEFAULT_OPUS_MODEL || true)
-            sonnet_model=$(first_value KIMI_ANTHROPIC_DEFAULT_SONNET_MODEL || true)
-            haiku_model=$(first_value KIMI_ANTHROPIC_DEFAULT_HAIKU_MODEL || true)
-            subagent_model=$(first_value KIMI_CLAUDE_CODE_SUBAGENT_MODEL || true)
-            effort_level=$(first_value KIMI_CLAUDE_CODE_EFFORT_LEVEL || true)
-
-            if [ -z "$token" ] || [ -z "$base_url" ]; then
-                echo "Missing KIMI_API_KEY or KIMI_ANTHROPIC_BASE_URL in $SECRETS_FILE"
-                return 1
-            fi
-            write_env_profile "$profile" auth_token "$token" "$base_url" "$model" "$opus_model" "$sonnet_model" "$haiku_model" "$subagent_model" "$effort_level"
-            ;;
-        deepseek )
-            token=$(first_value DEEPSEEK_API_KEY ANTHROPIC_AUTH_TOKEN || true)
-            base_url=$(first_value DEEPSEEK_ANTHROPIC_BASE_URL ANTHROPIC_BASE_URL || true)
-            model=$(first_value DEEPSEEK_ANTHROPIC_MODEL DEEPSEEK_MODEL ANTHROPIC_MODEL || true)
-            opus_model=$(first_value DEEPSEEK_ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL || true)
-            sonnet_model=$(first_value DEEPSEEK_ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL || true)
-            haiku_model=$(first_value DEEPSEEK_ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL || true)
-            subagent_model=$(first_value DEEPSEEK_CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_SUBAGENT_MODEL || true)
-            effort_level=$(first_value DEEPSEEK_CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_EFFORT_LEVEL || true)
-
-            if [ -z "$token" ] || [ -z "$base_url" ]; then
-                echo "Missing DEEPSEEK_API_KEY or DEEPSEEK_ANTHROPIC_BASE_URL in $SECRETS_FILE"
-                return 1
-            fi
-            write_env_profile "$profile" auth_token "$token" "$base_url" "$model" "$opus_model" "$sonnet_model" "$haiku_model" "$subagent_model" "$effort_level"
-            ;;
-        * )
-            return 2
-            ;;
+        anthropic ) auth_mode="api_key";   token_var_prefix="CLAUDE_ANTHROPIC"; required_vars="CLAUDE_ANTHROPIC_API_KEY ANTHROPIC_API_KEY" ;;
+        kimi )      auth_mode="auth_token"; token_var_prefix="KIMI";             required_vars="KIMI_API_KEY KIMI_ANTHROPIC_BASE_URL" ;;
+        deepseek )  auth_mode="auth_token"; token_var_prefix="DEEPSEEK";         required_vars="DEEPSEEK_API_KEY DEEPSEEK_ANTHROPIC_BASE_URL" ;;
+        * ) return 2 ;;
     esac
+
+    # Resolve all vars via first_value with fallback chains
+    _pfx() { echo "${token_var_prefix}_$1"; }
+    local token=$(first_value $(_pfx API_KEY) $required_vars || true)
+    local base_url=$(first_value $(_pfx ANTHROPIC_BASE_URL) ANTHROPIC_BASE_URL || true)
+    local model=$(first_value $(_pfx ANTHROPIC_MODEL) $(_pfx MODEL) ANTHROPIC_MODEL || true)
+    local opus_model=$(first_value $(_pfx ANTHROPIC_DEFAULT_OPUS_MODEL) ANTHROPIC_DEFAULT_OPUS_MODEL || true)
+    local sonnet_model=$(first_value $(_pfx ANTHROPIC_DEFAULT_SONNET_MODEL) ANTHROPIC_DEFAULT_SONNET_MODEL || true)
+    local haiku_model=$(first_value $(_pfx ANTHROPIC_DEFAULT_HAIKU_MODEL) ANTHROPIC_DEFAULT_HAIKU_MODEL || true)
+    local subagent_model=$(first_value $(_pfx CLAUDE_CODE_SUBAGENT_MODEL) CLAUDE_CODE_SUBAGENT_MODEL || true)
+    local effort_level=$(first_value $(_pfx CLAUDE_CODE_EFFORT_LEVEL) CLAUDE_CODE_EFFORT_LEVEL || true)
+
+    if [ -z "$token" ] || { [ -z "$base_url" ] && [ "$auth_mode" = "auth_token" ]; }; then
+        echo "Missing required credentials for $profile in $SECRETS_FILE"
+        return 1
+    fi
+
+    write_env_profile "$profile" "$auth_mode" "$token" "$base_url" "$model" "$opus_model" "$sonnet_model" "$haiku_model" "$subagent_model" "$effort_level"
 }
 
 print_env_profiles() {

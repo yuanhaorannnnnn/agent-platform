@@ -11,12 +11,7 @@ TIMER_PATH="$USER_SYSTEMD_DIR/$TIMER_NAME"
 
 mkdir -p "$USER_SYSTEMD_DIR"
 
-# Build PATH that includes node if available (e.g. from nvm)
-NODE_BIN_DIR=""
-if command -v node >/dev/null 2>&1; then
-  NODE_BIN_DIR="$(dirname "$(command -v node)")"
-fi
-ENV_PATH="PATH=${NODE_BIN_DIR:+$NODE_BIN_DIR:}/usr/local/bin:/usr/bin:/bin"
+ENV_PATH="PATH=/usr/local/bin:/usr/bin:/bin"
 
 cat > "$SERVICE_PATH" <<EOF
 [Unit]
