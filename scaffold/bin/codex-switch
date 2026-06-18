@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# codex-switch — switch Codex CLI between provider profiles
+# Usage: codex-switch [deepseek|glm|list|current]
+set -euo pipefail
+
+ACTIVE_FILE="$HOME/.codex/active-profile"
+
+_readlink_f() {
+    if command -v greadlink >/dev/null 2>&1; then greadlink -f "$1"
+    elif readlink -f / >/dev/null 2>&1; then readlink -f "$1"
+    else python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$1"
+    fi
+}
+
+SCRIPT_DIR="$(cd "$(dirname "$(_readlink_f "${BASH_SOURCE[0]}")")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+SECRETS_FILE="${CODEX_SWITCH_SECRETS:-$REPO_DIR/bash/secrets}"
+unset _readlink_f
+
+[ -f "$SECRETS_FILE" ] && source "$SECRETS_FILE"
+
+# ponytail: data-driven — add profile by appending one line
+declare -A PROFILES=(
+    [deepseek]="DEEPSEEK_API_KEY"
+    [glm]="GLM_API_KEY"
+)
+
+list_profiles() {
+    echo "Available Codex profiles:"
+    for name in "${!PROFILES[@]}"; do
+        local var="${PROFILES[$name]}"
+        if [ -n "${!var:-}" ]; then echo "  $name  ✓"
+        else echo "  $name  (missing $var in secrets)"
+        fi
+    done
+    [ -f "$ACTIVE_FILE" ] && echo "Active: $(cat "$ACTIVE_FILE")" || echo "Active: (default — base config.toml)"
+}
+
+switch_profile() {
+    local profile=$1
+    [ -z "${PROFILES[$profile]:-}" ] && { echo "Unknown: $profile" >&2; list_profiles; return 1; }
+    local var="${PROFILES[$profile]}"
+    [ -z "${!var:-}" ] && { echo "Missing $var in $SECRETS_FILE" >&2; return 1; }
+    echo "$profile" > "$ACTIVE_FILE"
+    echo "Codex profile → $profile"
+}
+
+show_current() {
+    [ -f "$ACTIVE_FILE" ] && echo "Active: $(cat "$ACTIVE_FILE")" || echo "Active: (none)"
+}
+
+case "${1:-}" in
+    ""|list|ls|-l|--list) list_profiles ;;
+    current|status|-s|--status) show_current ;;
+    help|-h|--help) echo "Usage: codex-switch [deepseek|glm|list|current]"; echo "Profiles: ${!PROFILES[*]}" ;;
+    *) switch_profile "$1" ;;
+esac

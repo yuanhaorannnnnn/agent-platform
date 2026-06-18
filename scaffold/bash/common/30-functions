@@ -150,3 +150,21 @@ gacp() {
     fi
     git add -u && git commit -m "$msg" && git push
 }
+
+# --- Codex CLI wrapper (profile-aware) ---------------------------------------
+codex() {
+    local active=""
+    [ -f "$HOME/.codex/active-profile" ] && active=$(cat "$HOME/.codex/active-profile")
+    # Source secrets and export the right key for Codex subprocess
+    local secrets="$HOME/scaffold/bash/secrets"
+    [ -f "$secrets" ] && source "$secrets"
+    case "$active" in
+        deepseek) export DEEPSEEK_API_KEY ;;
+        glm)      export GLM_API_KEY ;;
+    esac
+    if [ -n "$active" ]; then
+        command codex --profile "$active" "$@"
+    else
+        command codex "$@"
+    fi
+}
