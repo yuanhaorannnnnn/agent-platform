@@ -41,6 +41,18 @@ skill 通过 symlink 分发到以下 agent runtime 目录：
 | kimi | `~/.kimi/skills` |
 | pi | `~/.pi/agent/skills` |
 
+## 上游所有权
+
+`migration/upstream-manifest.yaml` 显式声明每个来源的维护方式：
+
+- `ownership: owned | forked | subscribed` — 谁负责内容演进
+- `update_policy: pinned | tracking` — 固定版本或跟踪分支
+- `local_patch: true | false` — snapshot sync 是否执行兼容转换
+
+当前启用的第三方 curated bundle 是 Ponytail 五件套。`ponytail` 核心 skill 在同步时移除 Codex 不支持的 `argument-hint`；不暴露 `ponytail-gain` 或 plugin hooks。其他保留上游继续由 `state/disabled-upstreams.yaml` 控制。
+
+安装脚本只替换 repo-managed symlink；遇到同名普通目录会拒绝覆盖，需先人工确认迁移。
+
 ## 使用
 
 ```bash

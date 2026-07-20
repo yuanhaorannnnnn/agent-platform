@@ -5,6 +5,9 @@ upstreams:
     repo: https://github.com/yuanhaorannnnnn/agent-skills.git
     branch: main
     integration_mode: managed_install
+    ownership: owned
+    update_policy: tracking
+    local_patch: false
     install:
       cwd: "."
       command:
@@ -23,6 +26,9 @@ upstreams:
     repo: https://github.com/lijigang/ljg-skills.git
     branch: md
     integration_mode: managed_snapshot
+    ownership: subscribed
+    update_policy: tracking
+    local_patch: false
     notes: >
       ljg-skills is a third-party skills repository with Markdown-form skills on
       the `md` branch. It fits the current managed_snapshot model because the
@@ -105,10 +111,46 @@ upstreams:
     repo: https://github.com/pbakaus/impeccable.git
     branch: main
     integration_mode: managed_snapshot
+    ownership: subscribed
+    update_policy: tracking
+    local_patch: false
     notes: >
       pbakaus/impeccable is a design system skill for Figma and web design.
       Managed as a snapshot; linked only to selected agent runtimes.
     tracked_skills:
       - name: impeccable
         source_path: skill
+        sync_policy: track_snapshot
+  - id: ponytail
+    label: Ponytail
+    cache_name: ponytail
+    kind: git
+    repo: https://github.com/DietrichGebert/ponytail.git
+    branch: main
+    integration_mode: managed_snapshot
+    runtime_link_mode: curated
+    ownership: subscribed
+    update_policy: tracking
+    local_patch: true
+    notes: >
+      Curated five-skill Ponytail bundle for the shared Agent runtime. The core
+      skill is normalized during snapshot sync by removing the unsupported
+      argument-hint frontmatter key. ponytail-gain and plugin hooks are not
+      exposed by this integration.
+    tracked_skills:
+      - name: ponytail
+        source_path: skills/ponytail
+        sync_policy: track_snapshot
+        frontmatter_remove_keys: [argument-hint]
+      - name: ponytail-audit
+        source_path: skills/ponytail-audit
+        sync_policy: track_snapshot
+      - name: ponytail-debt
+        source_path: skills/ponytail-debt
+        sync_policy: track_snapshot
+      - name: ponytail-help
+        source_path: skills/ponytail-help
+        sync_policy: track_snapshot
+      - name: ponytail-review
+        source_path: skills/ponytail-review
         sync_policy: track_snapshot

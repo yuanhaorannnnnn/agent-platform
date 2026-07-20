@@ -159,7 +159,12 @@ for agent_target in $EXPANDED_AGENT_TARGETS; do
   while IFS=$'\t' read -r skill_name target; do
     [ -n "$skill_name" ] || continue
     [ -n "$target" ] || continue
-    ln -sfn "$target" "$target_dir/$skill_name"
+    link_path="$target_dir/$skill_name"
+    if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+      echo "Refusing to replace non-symlink skill target: $link_path" >&2
+      continue
+    fi
+    ln -sfn "$target" "$link_path"
   done < <(collect_skill_targets "$UPSTREAM_ROOT" "$DISABLED_UPSTREAMS_PATH" "$MANIFEST_PATH" | sort -u)
 
   echo "Linked repo-managed assets into $target_dir"

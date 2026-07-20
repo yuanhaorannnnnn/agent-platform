@@ -6,6 +6,7 @@ import filecmp
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -76,6 +77,35 @@ def directories_equal(left: Path, right: Path) -> bool:
     )
 
 
+def remove_frontmatter_keys(skill_dir: Path, keys: list[str]) -> None:
+    """Remove selected single-line YAML keys from a synced SKILL.md."""
+    if not keys:
+        return
+    skill_md = skill_dir / "SKILL.md"
+    lines = skill_md.read_text(encoding="utf-8").splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        raise ValueError(f"missing YAML frontmatter: {skill_md}")
+    try:
+        end = next(index for index, line in enumerate(lines[1:], start=1) if line.strip() == "---")
+    except StopIteration as exc:
+        raise ValueError(f"unterminated YAML frontmatter: {skill_md}") from exc
+
+    requested = set(keys)
+    removed: set[str] = set()
+    kept = [lines[0]]
+    for line in lines[1:end]:
+        key = line.split(":", 1)[0].strip() if ":" in line else ""
+        if key in requested:
+            removed.add(key)
+            continue
+        kept.append(line)
+    missing = requested - removed
+    if missing:
+        raise ValueError(f"frontmatter keys not found in {skill_md}: {sorted(missing)}")
+    kept.extend(lines[end:])
+    skill_md.write_text("".join(kept), encoding="utf-8")
+
+
 def sync_skill(source_repo: Path, destination_root: Path, skill: dict) -> dict:
     source_dir = source_repo / skill["source_path"]
     destination_dir = destination_root / skill["name"]
@@ -89,17 +119,23 @@ def sync_skill(source_repo: Path, destination_root: Path, skill: dict) -> dict:
         }
 
     destination_root.mkdir(parents=True, exist_ok=True)
-    if destination_dir.exists() and directories_equal(source_dir, destination_dir):
-        return {
-            "name": skill["name"],
-            "status": "unchanged",
-            "source": str(source_dir),
-            "destination": str(destination_dir),
-        }
+    with tempfile.TemporaryDirectory(prefix=f"sync-{skill['name']}-") as tmp:
+        staged_dir = Path(tmp) / skill["name"]
+        shutil.copytree(source_dir, staged_dir)
+        remove_frontmatter_keys(staged_dir, skill.get("frontmatter_remove_keys", []))
 
-    if destination_dir.exists():
-        shutil.rmtree(destination_dir)
-    shutil.copytree(source_dir, destination_dir)
+        if destination_dir.exists() and directories_equal(staged_dir, destination_dir):
+            return {
+                "name": skill["name"],
+                "status": "unchanged",
+                "source": str(source_dir),
+                "destination": str(destination_dir),
+            }
+
+        if destination_dir.exists():
+            shutil.rmtree(destination_dir)
+        shutil.copytree(staged_dir, destination_dir)
+
     return {
         "name": skill["name"],
         "status": "updated",

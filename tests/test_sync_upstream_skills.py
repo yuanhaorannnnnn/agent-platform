@@ -126,7 +126,7 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
 
         self.assertEqual(
             [upstream["id"] for upstream in manifest["upstreams"]],
-            ["agent-skills", "ljg-skills", "impeccable"],
+            ["agent-skills", "ljg-skills", "impeccable", "ponytail"],
         )
 
     def test_sync_skill_copies_selected_directory(self) -> None:
@@ -154,6 +154,44 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
                 (destination_root / "sample-skill" / "reference.md").read_text(encoding="utf-8"),
                 "reference",
             )
+
+    def test_sync_skill_removes_configured_frontmatter_keys(self) -> None:
+        module = load_module()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_repo = tmp_path / "source-repo"
+            source_skill = source_repo / "skills" / "ponytail"
+            source_skill.mkdir(parents=True)
+            (source_skill / "SKILL.md").write_text(
+                "---\nname: ponytail\nargument-hint: '[lite|full]'\nlicense: MIT\n---\n# Ponytail\n",
+                encoding="utf-8",
+            )
+            destination_root = tmp_path / "destination"
+            skill = {
+                "name": "ponytail",
+                "source_path": "skills/ponytail",
+                "frontmatter_remove_keys": ["argument-hint"],
+            }
+
+            first = module.sync_skill(source_repo, destination_root, skill)
+            synced = (destination_root / "ponytail" / "SKILL.md").read_text(encoding="utf-8")
+            second = module.sync_skill(source_repo, destination_root, skill)
+
+            self.assertEqual(first["status"], "updated")
+            self.assertNotIn("argument-hint", synced)
+            self.assertIn("license: MIT", synced)
+            self.assertEqual(second["status"], "unchanged")
+
+    def test_manifest_upstreams_declare_ownership_policy(self) -> None:
+        manifest = yaml.safe_load(
+            (REPO_ROOT / "migration" / "upstream-manifest.yaml").read_text(encoding="utf-8")
+        )
+        for upstream in manifest["upstreams"]:
+            with self.subTest(upstream=upstream["id"]):
+                self.assertIn(upstream.get("ownership"), {"owned", "forked", "subscribed"})
+                self.assertIn(upstream.get("update_policy"), {"pinned", "tracking"})
+                self.assertIsInstance(upstream.get("local_patch"), bool)
 
     def test_sync_repo_snapshot_copies_repo_contents_except_git_metadata(self) -> None:
         module = load_module()
@@ -325,6 +363,33 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             subprocess.run(["bash", str(INSTALL_LINKS_PATH)], check=True, env=env)
 
             self.assertFalse((home / ".agents" / "skills" / "alpha-upstream").exists())
+
+    def test_install_links_preserves_non_symlink_skill_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            existing = home / ".agents" / "skills" / "alpha-skill"
+            existing.mkdir(parents=True)
+            marker = existing / "local-marker"
+            marker.write_text("keep", encoding="utf-8")
+            env = {
+                **subprocess.os.environ,
+                "HOME": str(home),
+                "SKILL_AGENT_TARGETS": "agents",
+            }
+
+            result = subprocess.run(
+                ["bash", str(INSTALL_LINKS_PATH)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(existing.is_dir())
+            self.assertFalse(existing.is_symlink())
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
+            self.assertIn("Refusing to replace non-symlink", result.stderr)
 
     def test_install_links_skips_managed_install_upstreams(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
