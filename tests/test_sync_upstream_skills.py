@@ -37,6 +37,55 @@ def load_sync_all_module():
 
 
 class SyncUpstreamSkillsTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.fixture_tmp = tempfile.TemporaryDirectory()
+        fixture_root = Path(cls.fixture_tmp.name)
+        cls.fixture_upstream_root = fixture_root / "upstream"
+        fixture_skills = (
+            ("alpha-upstream", "alpha-skill"),
+            ("beta-upstream", "beta-skill"),
+        )
+        for upstream_id, skill_name in fixture_skills:
+            skill_dir = cls.fixture_upstream_root / upstream_id / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                f"name: {skill_name}\n",
+                encoding="utf-8",
+            )
+
+        cls.fixture_manifest = fixture_root / "manifest.yaml"
+        cls.fixture_manifest.write_text(
+            yaml.safe_dump(
+                {
+                    "upstreams": [
+                        {
+                            "id": upstream_id,
+                            "tracked_skills": [{"name": skill_name}],
+                        }
+                        for upstream_id, skill_name in fixture_skills
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        cls.old_upstream_root = os.environ.get("UPSTREAM_ROOT_PATH")
+        cls.old_manifest = os.environ.get("UPSTREAM_MANIFEST_PATH")
+        os.environ["UPSTREAM_ROOT_PATH"] = str(cls.fixture_upstream_root)
+        os.environ["UPSTREAM_MANIFEST_PATH"] = str(cls.fixture_manifest)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        old_values = (
+            ("UPSTREAM_ROOT_PATH", cls.old_upstream_root),
+            ("UPSTREAM_MANIFEST_PATH", cls.old_manifest),
+        )
+        for key, old_value in old_values:
+            if old_value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old_value
+        cls.fixture_tmp.cleanup()
     def test_load_manifest_returns_tracked_skills(self) -> None:
         module = load_module()
 
@@ -71,20 +120,13 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
         self.assertEqual(upstream["branch"], "main")
         self.assertEqual(upstream["tracked_skills"][0]["name"], "sample-skill")
 
-    def test_manifest_keeps_noisy_upstreams_curated(self) -> None:
-        module = load_module()
-
+    def test_manifest_contains_only_retained_upstreams(self) -> None:
         manifest_path = REPO_ROOT / "migration" / "upstream-manifest.yaml"
-        superpowers = module.load_upstream_manifest(manifest_path, "superpowers-lite")
-        karpathy = module.load_upstream_manifest(manifest_path, "karpathy-skills")
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
         self.assertEqual(
-            [skill["name"] for skill in superpowers["tracked_skills"]],
-            ["test-driven-development"],
-        )
-        self.assertEqual(
-            [skill["name"] for skill in karpathy["tracked_skills"]],
-            ["karpathy-guidelines"],
+            [upstream["id"] for upstream in manifest["upstreams"]],
+            ["agent-skills", "ljg-skills", "impeccable"],
         )
 
     def test_sync_skill_copies_selected_directory(self) -> None:
@@ -210,7 +252,7 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
         disabled = {"upstreams": ["sample-upstream"]}
 
         self.assertTrue(module.is_upstream_disabled("sample-upstream", disabled))
-        self.assertFalse(module.is_upstream_disabled("gstack-repo", disabled))
+        self.assertFalse(module.is_upstream_disabled("untracked-upstream", disabled))
 
     def test_promotable_skills_skip_snapshot_only_entries(self) -> None:
         module = load_module()
@@ -229,10 +271,10 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             home = Path(tmp)
             codex_skills = home / ".codex" / "skills"
             codex_skills.mkdir(parents=True)
-            upstream_root = REPO_ROOT / "upstream"
-            tdd_skill = upstream_root / "superpowers-lite" / "test-driven-development"
-            self.assertTrue(tdd_skill.is_dir(), "superpowers-lite/test-driven-development must exist for this test")
-            (codex_skills / "test-driven-development").symlink_to(tdd_skill)
+            upstream_root = self.fixture_upstream_root
+            tdd_skill = upstream_root / "alpha-upstream" / "alpha-skill"
+            self.assertTrue(tdd_skill.is_dir(), "alpha-upstream/alpha-skill must exist for this test")
+            (codex_skills / "alpha-skill").symlink_to(tdd_skill)
 
             env = {
                 **subprocess.os.environ,
@@ -240,8 +282,8 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             }
             subprocess.run(["bash", str(INSTALL_LINKS_PATH)], check=True, env=env)
 
-            self.assertFalse((codex_skills / "test-driven-development").exists())
-            self.assertTrue((home / ".agents" / "skills" / "test-driven-development").is_symlink())
+            self.assertFalse((codex_skills / "alpha-skill").exists())
+            self.assertTrue((home / ".agents" / "skills" / "alpha-skill").is_symlink())
             self.assertFalse((home / ".claude" / "agents" / "repo-agents").exists())
             self.assertFalse((home / ".claude" / "commands" / "repo-commands").exists())
 
@@ -256,8 +298,8 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             claude_skills.mkdir(parents=True)
             (claude_agents / "repo-agents").symlink_to(REPO_ROOT / "scripts")
             (claude_commands / "repo-commands").symlink_to(REPO_ROOT / "scripts")
-            (claude_skills / "save-conversation").symlink_to(REPO_ROOT / "upstream" / "superpowers-lite" / "test-driven-development")
-            (claude_skills / "karpathy-guidelines").symlink_to(REPO_ROOT / "upstream" / "karpathy-skills" / "karpathy-guidelines")
+            (claude_skills / "save-conversation").symlink_to(REPO_ROOT / "upstream" / "alpha-upstream" / "alpha-skill")
+            (claude_skills / "beta-skill").symlink_to(REPO_ROOT / "upstream" / "beta-upstream" / "beta-skill")
 
             env = {
                 **subprocess.os.environ,
@@ -269,10 +311,10 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             self.assertFalse((claude_commands / "repo-commands").exists())
             self.assertFalse((claude_skills / "save-conversation").exists())
             # Cleaned symlinks are re-created from upstream
-            self.assertTrue((claude_skills / "test-driven-development").is_symlink())
-            self.assertTrue((claude_skills / "karpathy-guidelines").is_symlink())
+            self.assertTrue((claude_skills / "alpha-skill").is_symlink())
+            self.assertTrue((claude_skills / "beta-skill").is_symlink())
 
-    def test_install_links_does_not_expose_untracked_gstack_repo_root(self) -> None:
+    def test_install_links_does_not_expose_upstream_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             env = {
@@ -282,7 +324,7 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
 
             subprocess.run(["bash", str(INSTALL_LINKS_PATH)], check=True, env=env)
 
-            self.assertFalse((home / ".agents" / "skills" / "gstack").exists())
+            self.assertFalse((home / ".agents" / "skills" / "alpha-upstream").exists())
 
     def test_install_links_skips_managed_install_upstreams(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -302,14 +344,14 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             home = tmp_path / "home"
             existing_skills = home / ".agents" / "skills"
             existing_skills.mkdir(parents=True)
-            (existing_skills / "test-driven-development").symlink_to(REPO_ROOT / "upstream" / "superpowers-lite" / "test-driven-development")
+            (existing_skills / "alpha-skill").symlink_to(REPO_ROOT / "upstream" / "alpha-upstream" / "alpha-skill")
             disabled_file = tmp_path / "disabled-upstreams.yaml"
             disabled_file.write_text(
                 yaml.safe_dump(
                     {
                         "disabled": {
                             "skills": {
-                                "superpowers-lite": ["test-driven-development"],
+                                "alpha-upstream": ["alpha-skill"],
                             },
                         },
                     }
@@ -324,8 +366,8 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
 
             subprocess.run(["bash", str(INSTALL_LINKS_PATH)], check=True, env=env)
 
-            self.assertFalse((home / ".agents" / "skills" / "test-driven-development").exists())
-            self.assertTrue((home / ".agents" / "skills" / "karpathy-guidelines").is_symlink())
+            self.assertFalse((home / ".agents" / "skills" / "alpha-skill").exists())
+            self.assertTrue((home / ".agents" / "skills" / "beta-skill").is_symlink())
 
     def test_install_links_skips_disabled_upstream(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -336,7 +378,7 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
                 yaml.safe_dump(
                     {
                         "disabled": {
-                            "upstreams": ["superpowers-lite"],
+                            "upstreams": ["alpha-upstream"],
                         },
                     }
                 ),
@@ -350,8 +392,8 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
 
             subprocess.run(["bash", str(INSTALL_LINKS_PATH)], check=True, env=env)
 
-            self.assertFalse((home / ".agents" / "skills" / "test-driven-development").exists())
-            self.assertTrue((home / ".agents" / "skills" / "karpathy-guidelines").is_symlink())
+            self.assertFalse((home / ".agents" / "skills" / "alpha-skill").exists())
+            self.assertTrue((home / ".agents" / "skills" / "beta-skill").is_symlink())
 
     def test_install_links_skips_agent_scoped_disabled_skill_only_for_target_agent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -365,7 +407,7 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
                             "agents": {
                                 "claude": {
                                     "skills": {
-                                        "karpathy-skills": ["karpathy-guidelines"],
+                                        "beta-upstream": ["beta-skill"],
                                     },
                                 },
                             },
@@ -383,9 +425,9 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
 
             subprocess.run(["bash", str(INSTALL_LINKS_PATH)], check=True, env=env)
 
-            self.assertFalse((home / ".claude" / "skills" / "karpathy-guidelines").exists())
-            self.assertTrue((home / ".claude" / "skills" / "test-driven-development").is_symlink())
-            self.assertFalse((home / ".agents" / "skills" / "test-driven-development").exists())
+            self.assertFalse((home / ".claude" / "skills" / "beta-skill").exists())
+            self.assertTrue((home / ".claude" / "skills" / "alpha-skill").is_symlink())
+            self.assertFalse((home / ".agents" / "skills" / "alpha-skill").exists())
 
     def test_install_links_agent_scoped_disabled_skill_does_not_affect_shared_agents_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -399,7 +441,7 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
                             "agents": {
                                 "claude": {
                                     "skills": {
-                                        "karpathy-skills": ["karpathy-guidelines"],
+                                        "beta-upstream": ["beta-skill"],
                                     },
                                 },
                             },
@@ -417,8 +459,8 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
 
             subprocess.run(["bash", str(INSTALL_LINKS_PATH)], check=True, env=env)
 
-            self.assertTrue((home / ".agents" / "skills" / "karpathy-guidelines").is_symlink())
-            self.assertTrue((home / ".agents" / "skills" / "test-driven-development").is_symlink())
+            self.assertTrue((home / ".agents" / "skills" / "beta-skill").is_symlink())
+            self.assertTrue((home / ".agents" / "skills" / "alpha-skill").is_symlink())
 
     def test_run_managed_install_executes_upstream_installer(self) -> None:
         module = load_sync_all_module()

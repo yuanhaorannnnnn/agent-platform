@@ -53,7 +53,7 @@ skill-disable [--agent <agent>] <upstream> <skill>
 skill-enable [--agent <agent>] <upstream> <skill>
 
 # 同步上游快照
-python3 scripts/sync_upstream_skills.py --upstream-id superpowers-lite
+python3 scripts/sync_upstream_skills.py --upstream-id impeccable
 ```
 
 ## 状态文件

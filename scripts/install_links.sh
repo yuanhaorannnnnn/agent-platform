@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-UPSTREAM_ROOT="$ROOT_DIR/upstream"
-MANIFEST_PATH="$ROOT_DIR/migration/upstream-manifest.yaml"
+UPSTREAM_ROOT="${UPSTREAM_ROOT_PATH:-$ROOT_DIR/upstream}"
+MANIFEST_PATH="${UPSTREAM_MANIFEST_PATH:-$ROOT_DIR/migration/upstream-manifest.yaml}"
 DISABLED_UPSTREAMS_PATH="${DISABLED_UPSTREAMS_PATH:-$ROOT_DIR/state/disabled-upstreams.yaml}"
 SKILL_AGENT_TARGETS="${SKILL_AGENT_TARGETS:-all}"
 
