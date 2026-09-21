@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# codex-provider — 在 ChatGPT (OAuth)、DeepSeek、Gemini (本地反代) 之间切换 Codex provider
+#
+# 用法:
+#   codex-provider               显示当前 provider 与说明
+#   codex-provider deepseek     切换到 DeepSeek (api.deepseek.com, bearer token)
+#   codex-provider gemini       切换到 Gemini (本地 http://127.0.0.1:8045/v1, bearer token)
+#   codex-provider chatgpt      切换回 ChatGPT (恢复 auth.json 与 gpt-5.6-sol 配置)
+#
+# 设计:
+#   - 每个 provider 的快照保存在 $CODEX_HOME/profiles/<provider>/
+#   - 切换离开前会先刷新当前 provider 的快照，后续 config.toml 修改不会丢
+#   - 首次切 chatgpt 时自动从 $CODEX_HOME/backup-deepseek/ 迁移初始快照
+#   - 切换后联动定时任务: deepseek/gemini → 全部 PAUSED, chatgpt → ACTIVE + 恢复 gpt 档位
+#     (由 bin/codex-automations-gate 执行; 需要 Codex 窗口已退出, 否则只提示待办)
+#   - 注意: Codex 会话不支持 provider 热切换；切换后需退出窗口重新打开
+set -uo pipefail
+
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "${BASH_SOURCE[0]}")")" && pwd)"
+AUTOMATION_GATE="${CODEX_AUTOMATION_GATE:-$SCRIPT_DIR/codex-automations-gate}"
+PROFILE_DIR="${CODEX_PROFILE_DIR:-$CODEX_HOME/profiles}"
+DEEPSEEK_DIR="$PROFILE_DIR/deepseek"
+CHATGPT_DIR="$PROFILE_DIR/chatgpt"
+GEMINI_DIR="$PROFILE_DIR/gemini"
+BACKUP_DIR="$CODEX_HOME/backup-deepseek"
+
+CONFIG="$CODEX_HOME/config.toml"
+AUTH="$CODEX_HOME/auth.json"
+MODELS="$CODEX_HOME/models.json"
+
+die() { printf 'codex-provider: %s\n' "$*" >&2; exit 1; }
+
+# 从 config.toml 读取 model_provider（忽略注释与空白）
+provider_of() {
+  awk -F= '
+    /^[[:space:]]*model_provider[[:space:]]*=/ {
+      gsub(/[[:space:]"'"'"']/, "", $2); print $2; exit
+    }' "$1" 2>/dev/null
+}
+
+model_of() {
+  awk -F= '
+    /^[[:space:]]*model[[:space:]]*=/ {
+      gsub(/[[:space:]"'"'"']/, "", $2); print $2; exit
+    }' "$1" 2>/dev/null
+}
+
+current_provider() {
+  local p
+  p="$(provider_of "$CONFIG")"
+  if [ "$p" = "deepseek" ]; then printf 'deepseek\n'; return; fi
+  if [ "$p" = "gemini" ]; then printf 'gemini\n'; return; fi
+  if [ -f "$AUTH" ]; then printf 'chatgpt\n'; else printf 'unknown(%s)\n' "${p:-none}"; fi
+}
+
+snapshot() {
+  local dir="$1"
+  mkdir -p "$dir"
+  chmod 700 "$dir" 2>/dev/null || true
+  [ -f "$CONFIG" ] && { cp -p "$CONFIG" "$dir/config.toml"; chmod 600 "$dir/config.toml"; }
+  [ -f "$MODELS" ] && { cp -p "$MODELS" "$dir/models.json"; chmod 644 "$dir/models.json"; }
+  [ -f "$AUTH" ] && { cp -p "$AUTH" "$dir/auth.json"; chmod 600 "$dir/auth.json"; }
+  printf '  snapshot: %s -> %s\n' "$(basename "$dir")" "$dir"
+}
+
+ensure_profile() {
+  local dir="$1" name="$2"
+  [ -f "$dir/config.toml" ] && return 0
+  if [ "$name" = "chatgpt" ] && [ -f "$BACKUP_DIR/config.toml" ]; then
+    mkdir -p "$dir"; chmod 700 "$dir"
+    cp -p "$BACKUP_DIR/config.toml" "$dir/config.toml"; chmod 600 "$dir/config.toml"
+    if [ -f "$BACKUP_DIR/auth.json" ]; then
+      cp -p "$BACKUP_DIR/auth.json" "$dir/auth.json"; chmod 600 "$dir/auth.json"
+    fi
+    printf '  first-run: migrated chatgpt snapshot from %s\n' "$BACKUP_DIR"
+    return 0
+  fi
+  die "missing $name snapshot: $dir/config.toml"
+}
+
+install_profile() {
+  local dir="$1" target="$2"
+  ensure_profile "$dir" "$target"
+  printf 'applying %s snapshot to %s\n' "$target" "$CODEX_HOME"
+  [ -f "$dir/config.toml" ] && { cp -p "$dir/config.toml" "$CONFIG"; chmod 600 "$CONFIG"; }
+  if [ -f "$dir/models.json" ]; then
+    cp -p "$dir/models.json" "$MODELS"; chmod 644 "$MODELS"
+  fi
+  if [ "$target" = "chatgpt" ]; then
+    [ -f "$dir/auth.json" ] || die "chatgpt snapshot missing auth.json (ChatGPT login)"
+    cp -p "$dir/auth.json" "$AUTH"; chmod 600 "$AUTH"
+    printf '  restored %s/auth.json (ChatGPT login)\n' "$CODEX_HOME"
+  else
+    if [ -f "$AUTH" ]; then
+      rm -f "$AUTH"
+      printf '  removed %s/auth.json (API-key provider uses bearer token)\n' "$CODEX_HOME"
+    fi
+  fi
+}
+
+status() {
+  local p model
+  p="$(current_provider)"
+  model="$(model_of "$CONFIG")"
+  printf 'current provider: %s\n' "$p"
+  printf 'model:            %s\n' "${model:-<unset>}"
+  if [ -f "$AUTH" ]; then
+    printf 'auth.json:        present (ChatGPT login)\n'
+  else
+    printf 'auth.json:        absent (API-key mode)\n'
+  fi
+  printf 'profile dir:      %s\n' "$PROFILE_DIR"
+  printf 'next:             codex-provider deepseek|chatgpt|gemini\n'
+}
+
+switch_to() {
+  local target="$1" cur
+  case "$target" in deepseek|chatgpt|gemini) ;; *) die "unknown target: $target (deepseek|chatgpt|gemini)" ;; esac
+  cur="$(current_provider)"
+  case "$cur" in
+    deepseek) snapshot "$DEEPSEEK_DIR" ;;
+    chatgpt) snapshot "$CHATGPT_DIR" ;;
+    gemini) snapshot "$GEMINI_DIR" ;;
+  esac
+  case "$target" in
+    deepseek) install_profile "$DEEPSEEK_DIR" deepseek ;;
+    chatgpt) install_profile "$CHATGPT_DIR" chatgpt ;;
+    gemini) install_profile "$GEMINI_DIR" gemini ;;
+  esac
+  sync_automations "$target"
+  printf 'switched to %s. No hot-switch in a running Codex window: exit and reopen.\n' "$target"
+}
+
+# 定时任务跟随 provider：deepseek/gemini 全停，chatgpt 恢复
+sync_automations() {
+  local target="$1" gate_mode
+  case "$target" in
+    chatgpt) gate_mode=on ;;
+    deepseek|gemini) gate_mode=off ;;
+  esac
+  if [ ! -x "$AUTOMATION_GATE" ]; then
+    printf '  automations: %s 未找到，跳过（定时任务状态未联动）\n' "$AUTOMATION_GATE"
+    return 0
+  fi
+  printf 'applying automation gate: %s\n' "$gate_mode"
+  if "$AUTOMATION_GATE" "$gate_mode"; then
+    return 0
+  else
+    local rc=$?
+  fi
+  if [ "$rc" -eq 2 ]; then
+    printf '  automations: Codex 窗口仍在运行，未写入；退出后请执行: %s %s\n' "$AUTOMATION_GATE" "$gate_mode"
+  else
+    printf '  automations: gate 执行失败 (rc=%s)；退出 Codex 后请手动执行: %s %s\n' "$rc" "$AUTOMATION_GATE" "$gate_mode"
+  fi
+  return 0
+}
+
+main() {
+  case "${1:-status}" in
+    status|--status|-s) status ;;
+    deepseek|chatgpt|gemini) switch_to "$1" ;;
+    -h|--help) printf 'usage: codex-provider [deepseek|chatgpt|gemini|status]\n' ;;
+    *) die "unknown arg: $1 (deepseek|chatgpt|gemini|status)" ;;
+  esac
+}
+
+main "$@"

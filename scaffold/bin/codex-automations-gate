@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+"""codex-automations-gate — 让 Codex 定时任务跟随 provider 一起启用/停用
+
+用法:
+  codex-automations-gate status                 显示 provider 与每个定时任务的状态
+  codex-automations-gate off                    全部 PAUSED（provider=deepseek / gemini 时）
+  codex-automations-gate on                     全部 ACTIVE，并恢复 gpt 模型档位（provider=chatgpt 时）
+  codex-automations-gate gate                   只补齐「模型门禁」段落（幂等）
+
+通用参数:
+  --dry-run   只打印将要发生的改动，不写文件
+  --force     Codex 窗口仍在运行时也强行写入（默认拒绝，避免被 app 内存态覆盖）
+
+设计约束:
+  - $CODEX_HOME/automations/<id>/automation.toml 是调度器实际读取的来源（DB 只是镜像），两者一起写以免漂移。
+  - 必须在 Codex 窗口退出后执行；app 运行时的持久化会覆盖这里的修改。
+  - MODEL_PLAN 是「chatgpt 模式下应有的档位」，遵守既定上限：绝不用 gpt-6-astra，Sol 最多 low。
+    其中 automation-3 的 gpt-5.6-terra/low 由 DB/WAL 残留帧恢复，如与预期不符请直接改 MODEL_PLAN。
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+from pathlib import Path
+
+CODEX_HOME = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+AUTOMATIONS_DIR = CODEX_HOME / "automations"
+DB_PATH = CODEX_HOME / "sqlite" / "codex-dev.db"
+CONFIG_PATH = CODEX_HOME / "config.toml"
+AUTH_PATH = CODEX_HOME / "auth.json"
+APP_LOCK = Path.home() / ".config" / "Codex" / "SingletonLock"
+
+GATE_MARKER = "【执行前门禁"
+
+# provider=chatgpt 时的目标档位（id -> (model, reasoning_effort)）
+MODEL_PLAN: dict[str, tuple[str, str]] = {
+    "automation": ("gpt-5.6-sol", "low"),
+    "automation-2": ("gpt-5.6-terra", "low"),
+    "automation-3": ("gpt-5.6-terra", "low"),
+    "memory-canon": ("gpt-5.6-sol", "low"),
+    "wiki": ("gpt-5.6-luna", "low"),
+    "wiki-clippings": ("gpt-5.6-terra", "medium"),
+    "x": ("gpt-5.6-terra", "medium"),
+    "x-likes": ("gpt-5.6-luna", "low"),
+    "gpt": ("gpt-5.6-luna", "low"),
+}
+
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_APP_RUNNING = 2
+
+
+# ── TOML 单行字符串读写（automations/*.toml 为 app 生成的扁平结构）──────────
+_ESCAPES = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\r": "\\r", "\t": "\\t"}
+_UNESCAPES = {"\\": "\\", '"': '"', "n": "\n", "r": "\r", "t": "\t"}
+
+
+def toml_escape(value: str) -> str:
+    return "".join(_ESCAPES.get(ch, ch) for ch in value)
+
+
+def toml_unescape(value: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(value):
+        ch = value[i]
+        if ch == "\\" and i + 1 < len(value):
+            nxt = value[i + 1]
+            out.append(_UNESCAPES.get(nxt, "\\" + nxt))
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def toml_get(text: str, key: str) -> str | None:
+    match = re.search(rf'^{re.escape(key)}[ \t]*=[ \t]*"(.*)"[ \t]*$', text, re.M)
+    return toml_unescape(match.group(1)) if match else None
+
+
+def toml_set(text: str, key: str, value: str) -> str:
+    line = f'{key} = "{toml_escape(value)}"'
+    pattern = re.compile(rf'^{re.escape(key)}[ \t]*=.*$', re.M)
+    if pattern.search(text):
+        return pattern.sub(lambda _: line, text, count=1)
+    anchor = re.search(r"^id[ \t]*=.*$", text, re.M)
+    if anchor:
+        return f"{text[: anchor.end()]}\n{line}{text[anchor.end() :]}"
+    return f"{line}\n{text}"
+
+
+def prompt_with_gate(prompt: str, gate: str | None) -> str:
+    if gate is None or GATE_MARKER in prompt:
+        return prompt
+    return f"{gate}\n\n{prompt}"
+
+
+def canonical_gate() -> str | None:
+    """取现有任务里已经在用的门禁段落（首段），作为统一模板。"""
+    for toml in sorted(AUTOMATIONS_DIR.glob("*/automation.toml")):
+        prompt = toml_get(toml.read_text(encoding="utf-8"), "prompt") or ""
+        if GATE_MARKER in prompt:
+            return prompt.split("\n\n", 1)[0].rstrip("\n")
+    return None
+
+
+# ── 环境探测 ────────────────────────────────────────────────────────────
+def current_provider() -> str:
+    if CONFIG_PATH.exists():
+        match = re.search(
+            r'^model_provider[ \t]*=[ \t]*"([^"]+)"',
+            CONFIG_PATH.read_text(encoding="utf-8"),
+            re.M,
+        )
+        if match:
+            return match.group(1)
+    return "chatgpt" if AUTH_PATH.exists() else "unknown"
+
+
+def codex_app_running() -> bool:
+    try:
+        if APP_LOCK.is_symlink():
+            match = re.search(r"-(\d+)$", os.readlink(APP_LOCK))
+            if match and Path(f"/proc/{match.group(1)}").exists():
+                return True
+    except OSError:
+        pass
+    try:
+        return (
+            subprocess.run(
+                ["pgrep", "-f", "/usr/lib/chatgpt/chatgpt"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode
+            == 0
+        )
+    except OSError:
+        return False
+
+
+# ── 状态写入 ────────────────────────────────────────────────────────────
+def db_update(automation_id: str, fields: dict[str, object], dry_run: bool) -> str:
+    if not DB_PATH.exists():
+        return "db-missing"
+    assignments = ", ".join(f"{key} = ?" for key in fields)
+    values = [*fields.values(), automation_id]
+    if dry_run:
+        return f"dry:update({','.join(fields)})"
+    try:
+        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+            cursor = conn.execute(
+                f"UPDATE automations SET {assignments} WHERE id = ?", values
+            )
+            return "db-updated" if cursor.rowcount else "db-row-missing"
+    except sqlite3.Error as exc:  # DB 不可写时不影响 toml 生效
+        return f"db-error({exc})"
+
+
+def apply_automation(
+    toml_path: Path,
+    *,
+    status: str,
+    model: str | None = None,
+    effort: str | None = None,
+    gate: str | None = None,
+    dry_run: bool,
+) -> list[str]:
+    automation_id = toml_path.parent.name
+    text = toml_path.read_text(encoding="utf-8")
+    changes: set[str] = set()
+    db_fields: dict[str, object] = {}
+
+    if toml_get(text, "status") != status:
+        changes.add(f"status={status}")
+        text = toml_set(text, "status", status)
+        # app 语义：状态变化时清空 next_run_at，由 app 重新排期
+        db_fields["status"] = status
+        db_fields["next_run_at"] = None
+    if model and toml_get(text, "model") != model:
+        changes.add(f"model={model}")
+        text = toml_set(text, "model", model)
+        db_fields["model"] = model
+    if effort and toml_get(text, "reasoning_effort") != effort:
+        changes.add(f"effort={effort}")
+        text = toml_set(text, "reasoning_effort", effort)
+        db_fields["reasoning_effort"] = effort
+
+    prompt = toml_get(text, "prompt")
+    if prompt is not None:
+        gated = prompt_with_gate(prompt, gate)
+        if gated != prompt:
+            changes.add("gate")
+            text = toml_set(text, "prompt", gated)
+            db_fields["prompt"] = gated
+
+    if not dry_run and changes:
+        toml_path.write_text(text, encoding="utf-8")
+
+    if not changes:
+        return []
+
+    db_result = db_update(automation_id, db_fields, dry_run)
+    return [*sorted(changes), db_result]
+
+
+def collect_targets() -> list[Path]:
+    return sorted(AUTOMATIONS_DIR.glob("*/automation.toml"))
+
+
+def require_environment(dry_run: bool, force: bool) -> int | None:
+    if not AUTOMATIONS_DIR.is_dir():
+        print(f"codex-automations-gate: 找不到 {AUTOMATIONS_DIR}", file=sys.stderr)
+        return EXIT_ERROR
+    if not dry_run and not force and codex_app_running():
+        print(
+            "codex-automations-gate: 检测到 Codex 窗口仍在运行，已中止。\n"
+            "  退出 Codex 后重跑，或加 --force 强行写入（可能被 app 内存态覆盖）。",
+            file=sys.stderr,
+        )
+        return EXIT_APP_RUNNING
+    return None
+
+
+def print_status() -> int:
+    print(f"provider: {current_provider()}")
+    print(f"app:      {'running' if codex_app_running() else 'stopped'}")
+    print(f"home:     {CODEX_HOME}")
+    targets = collect_targets()
+    if not targets:
+        print("codex-automations-gate: 没有找到任何 automation.toml", file=sys.stderr)
+        return EXIT_ERROR
+    print(f"{'automation':<16} {'status':<8} {'model':<18} {'effort':<7} gate")
+    for toml_path in targets:
+        text = toml_path.read_text(encoding="utf-8")
+        prompt = toml_get(text, "prompt") or ""
+        print(
+            f"{toml_path.parent.name:<16} {toml_get(text, 'status') or '-':<8} "
+            f"{toml_get(text, 'model') or '-':<18} "
+            f"{toml_get(text, 'reasoning_effort') or '-':<7} "
+            f"{'yes' if GATE_MARKER in prompt else 'NO'}"
+        )
+    return EXIT_OK
+
+
+def run(mode: str, dry_run: bool, force: bool) -> int:
+    blocked = require_environment(dry_run, force)
+    if blocked is not None:
+        return blocked
+
+    provider = current_provider()
+    if mode == "on" and provider != "chatgpt" and not force:
+        print(
+            f"codex-automations-gate: 当前 provider={provider}，不是 chatgpt；"
+            "拒绝启用定时任务（需 --force 才强制）。",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
+
+    gate = canonical_gate()
+    if gate is None:
+        print("codex-automations-gate: 警告 未找到可复用的门禁模板，跳过 gate", file=sys.stderr)
+
+    targets = collect_targets()
+    touched = 0
+    for toml_path in targets:
+        automation_id = toml_path.parent.name
+        if mode == "off":
+            changes = apply_automation(
+                toml_path, status="PAUSED", gate=gate, dry_run=dry_run
+            )
+        elif mode == "on":
+            model, effort = MODEL_PLAN.get(automation_id, (None, None))
+            changes = apply_automation(
+                toml_path,
+                status="ACTIVE",
+                model=model,
+                effort=effort,
+                gate=gate,
+                dry_run=dry_run,
+            )
+        else:  # gate
+            text = toml_path.read_text(encoding="utf-8")
+            prompt = toml_get(text, "prompt") or ""
+            gated = prompt_with_gate(prompt, gate)
+            changes = []
+            if gated != prompt:
+                if not dry_run:
+                    toml_path.write_text(
+                        toml_set(text, "prompt", gated), encoding="utf-8"
+                    )
+                changes = [
+                    "gate",
+                    db_update(automation_id, {"prompt": gated}, dry_run),
+                ]
+        if changes:
+            touched += 1
+            prefix = "[dry-run] " if dry_run else ""
+            print(f"{prefix}{automation_id:<16} {' '.join(changes)}")
+
+    verb = {"off": "PAUSED", "on": "ACTIVE", "gate": "gate-only"}[mode]
+    print(
+        f"\n{'[dry-run] ' if dry_run else ''}{mode} ({verb}) → 变更 {touched}/{len(targets)} 条；"
+        f"provider={provider}；重启 Codex 窗口后生效"
+    )
+    if mode == "on":
+        print("提示: 打开 Codex 后确认这些任务的下次运行时间已恢复；为空时在 UI 里暂停再恢复一次。")
+    return EXIT_OK
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="codex-automations-gate",
+        description="让 Codex 定时任务跟随 provider 启用/停用",
+    )
+    parser.add_argument(
+        "mode", nargs="?", default="status", choices=["status", "off", "on", "gate"]
+    )
+    parser.add_argument("--dry-run", action="store_true", help="只打印改动，不写文件")
+    parser.add_argument("--force", action="store_true", help="Codex 运行时也强行写入")
+    args = parser.parse_args()
+
+    if args.mode == "status":
+        return print_status()
+    return run(args.mode, args.dry_run, args.force)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
