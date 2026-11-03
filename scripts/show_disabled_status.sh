@@ -5,8 +5,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_PATH="${DISABLED_UPSTREAMS_PATH:-$ROOT_DIR/state/disabled-upstreams.yaml}"
 
-PYTHON3="$(command -v python3)"
-"$PYTHON3" -c "import yaml" 2>/dev/null || PYTHON3="/home/lkshpc/anaconda3/bin/python3"
+PYTHON3="${PYTHON3_BIN:-$(command -v python3)}"
+if ! "$PYTHON3" -c "import yaml" 2>/dev/null; then
+  for candidate in "${ANACONDA_PYTHON3:-}" "$HOME/anaconda3/bin/python3"; do
+    [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+    if "$candidate" -c "import yaml" 2>/dev/null; then PYTHON3="$candidate"; break; fi
+  done
+fi
+"$PYTHON3" -c "import yaml" 2>/dev/null || { echo "[!] Python with PyYAML not found; set PYTHON3_BIN" >&2; exit 1; }
 
 upstream_filter=""
 while [ "$#" -gt 0 ]; do
@@ -17,15 +23,16 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-$PYTHON3 - "$STATE_PATH" "$ROOT_DIR" "$upstream_filter" <<'PY'
+"$PYTHON3" - "$STATE_PATH" "$ROOT_DIR" "$upstream_filter" <<'PY'
 import sys
+import os
 from pathlib import Path
 import yaml
 
 state_path = Path(sys.argv[1]); root_dir = sys.argv[2]; upstream_filter = sys.argv[3]
 upstream_root = Path(root_dir) / "upstream"
 disabled_dir = upstream_root / ".disabled"
-manifest_path = Path.home() / ".agents" / "repos" / "agent-skills" / "manifest.yaml"
+manifest_path = Path(os.environ.get("AGENT_SKILLS_MANIFEST", str(Path.home() / ".agents" / "repos" / "agent-skills" / "manifest.yaml")))
 
 state = yaml.safe_load(state_path.read_text(encoding="utf-8")) if state_path.exists() else {} or {}
 disabled = state.get("disabled", {})

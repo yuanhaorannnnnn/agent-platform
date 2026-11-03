@@ -49,6 +49,16 @@ def run_links() -> None:
     subprocess.run([str(INSTALL_LINKS)], check=True)
 
 
+def run_managed_install(cache_dir: Path, upstream: dict) -> dict:
+    install = upstream.get("install") or {}
+    command = install.get("command")
+    if not command:
+        return {"status": "skipped"}
+    cwd = cache_dir / install.get("cwd", ".")
+    subprocess.run(command, cwd=cwd, text=True, check=True)
+    return {"status": "installed", "runtime_dir": str(Path(install.get("runtime_dir", "~/.agents/skills")).expanduser())}
+
+
 def main() -> int:
     import sys
 
@@ -70,7 +80,7 @@ def main() -> int:
             cache_name = upstream.get("cache_name", upstream_id)
             cache_dir = args.cache_root / cache_name
             sync_root = args.sync_root / upstream_id
-            head = clone_or_update_repo(upstream["repo"], upstream.get("branch", "main"), cache_dir)
+            head = clone_or_update_repo(upstream["repo"], upstream.get("branch", "main"), cache_dir, upstream.get("revision"))
 
             print(f"[{upstream_id}] Synced upstream repo: {upstream['repo']}")
             print(f"[{upstream_id}] Upstream head: {head}")
@@ -80,8 +90,7 @@ def main() -> int:
             install = upstream.get("install") or {}
             cmd = install.get("command")
             if cmd:
-                cwd = cache_dir / install.get("cwd", ".")
-                subprocess.run(cmd, cwd=cwd, text=True, check=True)
+                run_managed_install(cache_dir, upstream)
                 print(f"[{upstream_id}] ran install: {cmd}")
 
             for skill in tracked_skills:

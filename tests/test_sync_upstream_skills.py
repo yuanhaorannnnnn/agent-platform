@@ -126,8 +126,34 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
 
         self.assertEqual(
             [upstream["id"] for upstream in manifest["upstreams"]],
-            ["agent-skills", "ljg-skills", "impeccable", "ponytail"],
+            ["agent-skills", "ljg-skills", "impeccable", "ponytail", "hairline"],
         )
+
+    def test_pinned_revision_survives_upstream_advance_and_preserves_dirty_cache(self) -> None:
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            origin = Path(tmp) / "origin"
+            cache = Path(tmp) / "cache"
+            module.run(["git", "init", "-b", "main", str(origin)])
+            module.run(["git", "config", "user.email", "test@example.invalid"], cwd=origin)
+            module.run(["git", "config", "user.name", "test"], cwd=origin)
+            (origin / "version").write_text("one")
+            module.run(["git", "add", "version"], cwd=origin)
+            module.run(["git", "commit", "-m", "one"], cwd=origin)
+            pinned = module.run(["git", "rev-parse", "HEAD"], cwd=origin)
+            self.assertEqual(module.clone_or_update_repo(str(origin), "main", cache, pinned), pinned)
+            (origin / "version").write_text("two")
+            module.run(["git", "commit", "-am", "two"], cwd=origin)
+            latest = module.run(["git", "rev-parse", "HEAD"], cwd=origin)
+            self.assertEqual(module.clone_or_update_repo(str(origin), "main", cache, pinned), pinned)
+            self.assertEqual((cache / "version").read_text(), "one")
+            self.assertEqual(module.clone_or_update_repo(str(origin), "main", cache), latest)
+            (cache / "version").write_text("local work")
+            with self.assertRaisesRegex(ValueError, "local changes"):
+                module.clone_or_update_repo(str(origin), "main", cache, pinned)
+            self.assertEqual((cache / "version").read_text(), "local work")
+            with self.assertRaisesRegex(ValueError, "full lowercase"):
+                module.clone_or_update_repo(str(origin), "main", cache, "main")
 
     def test_sync_skill_copies_selected_directory(self) -> None:
         module = load_module()
@@ -181,6 +207,33 @@ class SyncUpstreamSkillsTests(unittest.TestCase):
             self.assertEqual(first["status"], "updated")
             self.assertNotIn("argument-hint", synced)
             self.assertIn("license: MIT", synced)
+            self.assertEqual(second["status"], "unchanged")
+
+    def test_sync_skill_appends_managed_markdown(self) -> None:
+        module = load_module()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_repo = tmp_path / "source-repo"
+            source_skill = source_repo / "skills" / "ponytail"
+            source_skill.mkdir(parents=True)
+            (source_skill / "SKILL.md").write_text(
+                "---\nname: ponytail\n---\n\n# Ponytail\n",
+                encoding="utf-8",
+            )
+            destination_root = tmp_path / "destination"
+            skill = {
+                "name": "ponytail",
+                "source_path": "skills/ponytail",
+                "skill_md_append": "## Post-build ablation\n\nMinimum sufficient.",
+            }
+
+            first = module.sync_skill(source_repo, destination_root, skill)
+            synced = (destination_root / "ponytail" / "SKILL.md").read_text(encoding="utf-8")
+            second = module.sync_skill(source_repo, destination_root, skill)
+
+            self.assertEqual(first["status"], "updated")
+            self.assertEqual(synced.count("## Post-build ablation"), 1)
             self.assertEqual(second["status"], "unchanged")
 
     def test_manifest_upstreams_declare_ownership_policy(self) -> None:

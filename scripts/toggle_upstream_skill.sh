@@ -10,10 +10,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_ROOT="$ROOT_DIR/upstream"
 DISABLED_ROOT="$UPSTREAM_ROOT/.disabled"
 STATE_PATH="${DISABLED_UPSTREAMS_PATH:-$ROOT_DIR/state/disabled-upstreams.yaml}"
-AGENT_SKILLS_MANIFEST="$HOME/.agents/repos/agent-skills/manifest.yaml"
+AGENT_SKILLS_DIR="${AGENT_SKILLS_DIR:-$HOME/.agents/repos/agent-skills}"
+AGENT_SKILLS_MANIFEST="${AGENT_SKILLS_MANIFEST:-$AGENT_SKILLS_DIR/manifest.yaml}"
 
-PYTHON3="$(command -v python3)"
-"$PYTHON3" -c "import yaml" 2>/dev/null || PYTHON3="/home/lkshpc/anaconda3/bin/python3"
+PYTHON3="${PYTHON3_BIN:-$(command -v python3)}"
+if ! "$PYTHON3" -c "import yaml" 2>/dev/null; then
+  for candidate in "${ANACONDA_PYTHON3:-}" "$HOME/anaconda3/bin/python3"; do
+    [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+    if "$candidate" -c "import yaml" 2>/dev/null; then PYTHON3="$candidate"; break; fi
+  done
+fi
+"$PYTHON3" -c "import yaml" 2>/dev/null || { echo "[!] Python with PyYAML not found; set PYTHON3_BIN" >&2; exit 1; }
 
 usage() { cat >&2 <<'EOF'
 Usage: skill-toggle --disable|--enable <upstream> <skill|--all> [--dry-run]
@@ -43,7 +50,7 @@ done
 if [ "$upstream" = "agent-skills" ]; then
   [ ! -f "$AGENT_SKILLS_MANIFEST" ] && { echo "[!] agent-skills manifest not found" >&2; exit 1; }
 
-  $PYTHON3 - "$AGENT_SKILLS_MANIFEST" "$skill" "$all" "$action" <<'PY'
+  "$PYTHON3" - "$AGENT_SKILLS_MANIFEST" "$skill" "$all" "$action" <<'PY'
 import sys
 from pathlib import Path
 import yaml
@@ -70,7 +77,7 @@ PY
   read -r confirm
   case "$confirm" in [yY]|[yY][eE][sS]) ;; *) echo "已取消。"; exit 0 ;; esac
 
-  $PYTHON3 - "$AGENT_SKILLS_MANIFEST" "$skill" "$all" "$action" <<'PY'
+  "$PYTHON3" - "$AGENT_SKILLS_MANIFEST" "$skill" "$all" "$action" <<'PY'
 import sys
 from pathlib import Path
 import yaml
@@ -86,7 +93,7 @@ path.write_text(yaml.safe_dump(m, sort_keys=False, allow_unicode=True), encoding
 print(f"  [agent-skills] manifest.yaml 已更新")
 PY
 
-  [ -f "$HOME/.agents/repos/agent-skills/scripts/install.mjs" ] && node "$HOME/.agents/repos/agent-skills/scripts/install.mjs" 2>&1 | tail -3
+  [ -f "$AGENT_SKILLS_DIR/scripts/install.mjs" ] && node "$AGENT_SKILLS_DIR/scripts/install.mjs" 2>&1 | tail -3
   echo "  [agent-skills] 完成。"; exit 0
 fi
 
@@ -123,7 +130,7 @@ mkdir -p "$(dirname "$to")"
 mv "$from" "$to"
 
 # Update YAML state
-$PYTHON3 - "$STATE_PATH" "$upstream" "$skill" "$all" "$action" <<'PY'
+"$PYTHON3" - "$STATE_PATH" "$upstream" "$skill" "$all" "$action" <<'PY'
 import sys
 from pathlib import Path
 import yaml

@@ -9,6 +9,8 @@
 | `agent-skills` | 自有 skill 产品 | 自研 skill（save/restore conversation、work-report、video-ingest 等） |
 | `agent-platform` | 第三方 skill 管理 | 上游快照、runtime symlink、disable/enable 状态 |
 
+`scaffold` 是独立仓库，默认 checkout 位置为 `~/scaffold`，也可通过 `SCAFFOLD_DIR` 配置；`agent-platform` 不再把它作为运行时管理内容。当前仓库内的 `scaffold/` 保留为未破坏现有 Git 历史的 legacy 副本，迁移完成后由独立 checkout 负责部署入口。
+
 ## 目录结构
 
 ```

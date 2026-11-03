@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import filecmp
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -56,14 +57,21 @@ def is_skill_disabled(upstream_id: str, skill_name: str, disabled: dict) -> bool
     return skill_name in set(disabled_skills.get(upstream_id) or [])
 
 
-def clone_or_update_repo(repo_url: str, branch: str, cache_dir: Path) -> str:
+def clone_or_update_repo(repo_url: str, branch: str, cache_dir: Path, revision: str | None = None) -> str:
+    if revision is not None and not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("revision must be a full lowercase Git commit SHA")
+    if revision and cache_dir.exists() and run(["git", "status", "--porcelain"], cwd=cache_dir):
+        raise ValueError("pinned upstream cache has local changes; preserve them before syncing")
     cache_dir.parent.mkdir(parents=True, exist_ok=True)
     if not cache_dir.exists():
         run(["git", "clone", "--branch", branch, "--single-branch", repo_url, str(cache_dir)])
-    else:
+    elif not revision:
         run(["git", "fetch", "origin", branch], cwd=cache_dir)
         run(["git", "checkout", branch], cwd=cache_dir)
         run(["git", "pull", "--ff-only", "origin", branch], cwd=cache_dir)
+    if revision:
+        run(["git", "fetch", "origin", revision], cwd=cache_dir)
+        run(["git", "checkout", "--detach", revision], cwd=cache_dir)
     return run(["git", "rev-parse", "HEAD"], cwd=cache_dir)
 
 
@@ -106,6 +114,15 @@ def remove_frontmatter_keys(skill_dir: Path, keys: list[str]) -> None:
     skill_md.write_text("".join(kept), encoding="utf-8")
 
 
+def append_skill_markdown(skill_dir: Path, markdown: str) -> None:
+    """Append a managed local extension to a synced SKILL.md."""
+    if not markdown:
+        return
+    skill_md = skill_dir / "SKILL.md"
+    content = skill_md.read_text(encoding="utf-8").rstrip()
+    skill_md.write_text(f"{content}\n\n{markdown.strip()}\n", encoding="utf-8")
+
+
 def sync_skill(source_repo: Path, destination_root: Path, skill: dict) -> dict:
     source_dir = source_repo / skill["source_path"]
     destination_dir = destination_root / skill["name"]
@@ -123,6 +140,7 @@ def sync_skill(source_repo: Path, destination_root: Path, skill: dict) -> dict:
         staged_dir = Path(tmp) / skill["name"]
         shutil.copytree(source_dir, staged_dir)
         remove_frontmatter_keys(staged_dir, skill.get("frontmatter_remove_keys", []))
+        append_skill_markdown(staged_dir, skill.get("skill_md_append", ""))
 
         if destination_dir.exists() and directories_equal(staged_dir, destination_dir):
             return {
@@ -254,7 +272,7 @@ def main() -> int:
     cache_name = upstream.get("cache_name", args.upstream_id)
     cache_dir = args.cache_root / cache_name
     sync_root = args.sync_root / args.upstream_id
-    head = clone_or_update_repo(upstream["repo"], upstream.get("branch", "main"), cache_dir)
+    head = clone_or_update_repo(upstream["repo"], upstream.get("branch", "main"), cache_dir, upstream.get("revision"))
 
     print(f"Synced upstream repo: {upstream['repo']}")
     print(f"Upstream head: {head}")

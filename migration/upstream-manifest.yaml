@@ -135,13 +135,27 @@ upstreams:
     notes: >
       Curated five-skill Ponytail bundle for the shared Agent runtime. The core
       skill is normalized during snapshot sync by removing the unsupported
-      argument-hint frontmatter key. ponytail-gain and plugin hooks are not
-      exposed by this integration.
+      argument-hint frontmatter key and appending a local post-build ablation
+      gate inspired by Xuanwo's ablation-experiment workflow. ponytail-gain and
+      plugin hooks are not exposed by this integration.
     tracked_skills:
       - name: ponytail
         source_path: skills/ponytail
         sync_policy: track_snapshot
         frontmatter_remove_keys: [argument-hint]
+        skill_md_append: |
+          ## Post-build ablation
+
+          After a design or implementation is complete, run one ablation pass
+          before delivery: inspect each added abstraction, layer, dependency,
+          option, and explanatory artifact. Remove it when the accepted behavior
+          and required checks still hold without it.
+
+          This gate minimizes implementation machinery, not information. Never
+          remove source-specific mechanisms, evidence, constraints, tradeoffs,
+          safety measures, or requested behavior when doing so would change the
+          reader's understanding, engineering judgment, or next action. Minimum
+          sufficient is not minimum output.
       - name: ponytail-audit
         source_path: skills/ponytail-audit
         sync_policy: track_snapshot
@@ -154,3 +168,26 @@ upstreams:
       - name: ponytail-review
         source_path: skills/ponytail-review
         sync_policy: track_snapshot
+  - id: hairline
+    label: Hairline interactive line figures
+    cache_name: hairline
+    kind: git
+    repo: https://github.com/lucasmarkes/hairline.git
+    branch: main
+    revision: bc782244216620434b14736df1d74daed2d05046
+    integration_mode: managed_snapshot
+    runtime_link_mode: curated
+    ownership: subscribed
+    update_policy: pinned
+    local_patch: true
+    notes: >
+      Only hairline-create is exposed. The upstream engine, bench and checks
+      remain unchanged. Only the unsupported argument-hint frontmatter key is
+      removed for Codex discovery. Update revision explicitly and repeat sample visual
+      acceptance before adopting a newer snapshot. React/npm integration is
+      outside this integration scope.
+    tracked_skills:
+      - name: hairline-create
+        source_path: skills/hairline-create
+        sync_policy: track_snapshot
+        frontmatter_remove_keys: [argument-hint]

@@ -52,7 +52,7 @@ target_selected() {
 }
 
 collect_skill_targets() {
-  python3 - "$1" "$2" "$3" <<'PY'
+  python3 - "$1" "$2" "$3" "$4" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -62,6 +62,7 @@ import yaml
 upstream_root = Path(sys.argv[1])
 disabled_path = Path(sys.argv[2])
 manifest_path = Path(sys.argv[3])
+agent = sys.argv[4]
 
 disabled_data = yaml.safe_load(disabled_path.read_text(encoding="utf-8")) if disabled_path.exists() else {}
 disabled = disabled_data.get("disabled", {}) if isinstance(disabled_data, dict) else {}
@@ -75,7 +76,13 @@ for upstream in manifest_data.get("upstreams", []):
     if upstream.get("runtime_link_mode") == "curated":
         curated_upstreams[uid] = {s["name"] for s in upstream.get("tracked_skills", [])}
 
+agent_disabled = (disabled.get("agents") or {}).get(agent, {}) or {}
+
 def should_skip(uid, skill):
+    if uid in (agent_disabled.get("upstreams") or []):
+        return True
+    if skill in (agent_disabled.get("skills") or {}).get(uid, []):
+        return True
     if uid in disabled_upstreams:
         return True
     return skill in disabled_skills.get(uid, set())
@@ -142,6 +149,17 @@ if [ -d "$HOME/.claude/skills" ]; then
 fi
 fi
 
+# Retire only this repository's legacy Codex links; never foreign links/files.
+if [ -d "$HOME/.codex/skills" ]; then
+  for existing_link in "$HOME/.codex/skills"/*; do
+    [ -L "$existing_link" ] || continue
+    existing_target="$(readlink "$existing_link" || true)"
+    case "$existing_target" in
+      "$ROOT_DIR/"*|"$UPSTREAM_ROOT/"*) rm -f "$existing_link" ;;
+    esac
+  done
+fi
+
 for agent_target in $EXPANDED_AGENT_TARGETS; do
   target_dir="$(target_dir_for_agent "$agent_target")"
   mkdir -p "$target_dir"
@@ -165,7 +183,7 @@ for agent_target in $EXPANDED_AGENT_TARGETS; do
       continue
     fi
     ln -sfn "$target" "$link_path"
-  done < <(collect_skill_targets "$UPSTREAM_ROOT" "$DISABLED_UPSTREAMS_PATH" "$MANIFEST_PATH" | sort -u)
+  done < <(collect_skill_targets "$UPSTREAM_ROOT" "$DISABLED_UPSTREAMS_PATH" "$MANIFEST_PATH" "$agent_target" | sort -u)
 
   echo "Linked repo-managed assets into $target_dir"
 done
