@@ -5,7 +5,7 @@
 # --- Navigation -------------------------------------------------------------
 alias gt="cd /media/yhr/2T"
 alias gc="cd /media/yhr/2T/CarlaUE5"
-alias gp="cd /media/yhr/2T/files/cc_projects/"
+alias gp="cd /media/yhr/2T/files/projects/"
 alias gs="cd /home/yhr/.agents/repos/agent-skills"
 
 # --- Conda environments -----------------------------------------------------

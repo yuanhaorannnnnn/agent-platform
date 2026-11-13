@@ -25,4 +25,4 @@ alias cs="clear"
 alias reher="herdr server reload-config"
 
 # --- Tools ------------------------------------------------------------------
-alias codex-up="npm i -g @openai/codex@latest"
+alias gpt-up="npm i -g @openai/codex@latest && if command -v apt >/dev/null 2>&1; then sudo apt install --only-upgrade chatgpt; fi"

@@ -15,12 +15,14 @@ AGENT_SKILLS_REPO="https://github.com/yuanhaorannnnnn/agent-skills.git"
 
 OS="$(uname -s)"
 
-# Default branches: macOS uses 'mac' branches, Linux uses 'master'/'main'
+# Default branches follow the declared remotes. Override per checkout when needed.
 if [ "$OS" = "Darwin" ]; then
+    SCAFFOLD_BRANCH="${SCAFFOLD_BRANCH:-mac}"
     PLATFORM_BRANCH="${PLATFORM_BRANCH:-mac}"
     SKILLS_BRANCH="${SKILLS_BRANCH:-mac}"
 else
-    PLATFORM_BRANCH="${PLATFORM_BRANCH:-master}"
+    SCAFFOLD_BRANCH="${SCAFFOLD_BRANCH:-master}"
+    PLATFORM_BRANCH="${PLATFORM_BRANCH:-main}"
     SKILLS_BRANCH="${SKILLS_BRANCH:-main}"
 fi
 PULL=false
@@ -129,7 +131,7 @@ fi
 # --- step 1: scaffold --------------------------------------------------------
 echo "── [1/3] scaffold ────────────────────────────────"
 if [ -n "$SCAFFOLD_REPO" ]; then
-    ensure_repo "$SCAFFOLD_REPO" "$SCAFFOLD_DIR" master
+    ensure_repo "$SCAFFOLD_REPO" "$SCAFFOLD_DIR" "$SCAFFOLD_BRANCH"
 fi
 if [ ! -f "$SCAFFOLD_DIR/install.sh" ]; then
     die "scaffold not found at $SCAFFOLD_DIR"

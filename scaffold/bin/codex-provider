@@ -5,7 +5,7 @@
 #   codex-provider               显示当前 provider 与说明
 #   codex-provider deepseek     切换到 DeepSeek (api.deepseek.com, bearer token)
 #   codex-provider gemini       切换到 Gemini (本地 http://127.0.0.1:8045/v1, bearer token)
-#   codex-provider chatgpt      切换回 ChatGPT (恢复 auth.json 与 gpt-5.6-sol 配置)
+#   codex-provider chatgpt      切换回 ChatGPT (恢复 auth.json 与 gpt-6-luna 配置)
 #
 # 设计:
 #   - 每个 provider 的快照保存在 $CODEX_HOME/profiles/<provider>/

@@ -4,14 +4,19 @@
 
 # --- Proxy toggle -----------------------------------------------------------
 proxy() {
-    export http_proxy="http://127.0.0.1:7890"
-    export https_proxy="http://127.0.0.1:7890"
+    local proxy_url="http://127.0.0.1:7890"
+    export http_proxy="$proxy_url"
+    export https_proxy="$proxy_url"
+    export all_proxy="$proxy_url"
+    export HTTP_PROXY="$proxy_url"
+    export HTTPS_PROXY="$proxy_url"
+    export ALL_PROXY="$proxy_url"
     echo "HTTP Proxy On"
 }
 
 noproxy() {
-    unset http_proxy
-    unset https_proxy
+    unset http_proxy https_proxy all_proxy
+    unset HTTP_PROXY HTTPS_PROXY ALL_PROXY
     echo "HTTP Proxy off"
 }
 
@@ -143,12 +148,60 @@ tk() {
 
 # --- git add + commit + push -------------------------------------------------
 gacp() {
-    local msg="${1:-}"
+    local msg="$*"
     if [ -z "$msg" ]; then
         echo "Usage: gacp <commit-message>"
         return 1
     fi
-    git add -u && git commit -m "$msg" && git push
+
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "Not inside a Git worktree."
+        return 1
+    fi
+
+    local changes
+    changes=$(git status --short --untracked-files=all -- .) || return 1
+    if [ -z "$changes" ]; then
+        echo "Nothing to commit."
+        return 1
+    fi
+
+    echo "Changes found:"
+    printf '%s\n' "$changes"
+    echo
+
+    local answer add_mode
+    while true; do
+        if ! read -r -p "Stage, commit, and push? [y]es (tracked only)/[a]ll (include untracked)/[q]abort: " answer; then
+            echo
+            echo "Aborted."
+            return 1
+        fi
+        case "$answer" in
+            y|Y|yes|Yes|YES)
+                add_mode="tracked"
+                break
+                ;;
+            a|A|all|All|ALL)
+                add_mode="all"
+                break
+                ;;
+            q|Q|quit|Quit|QUIT|abort|Abort|ABORT|n|N|no|No|NO|"")
+                echo "Aborted."
+                return 1
+                ;;
+            *)
+                echo "Enter 'yes', 'all', or 'abort'."
+                ;;
+        esac
+    done
+
+    if [ "$add_mode" = "tracked" ]; then
+        git add -u -- . || return 1
+    else
+        git add . || return 1
+    fi
+    git commit -m "$msg" && git push
 }
 
 # --- Codex CLI wrapper (profile-aware) ---------------------------------------

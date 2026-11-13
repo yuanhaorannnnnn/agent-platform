@@ -41,7 +41,7 @@ scaffold/
 ## 安装
 
 ```bash
-git clone https://github.com/yuanhaorannnnnn/scaffold.git ~/scaffold
+git clone --branch master https://github.com/yuanhaorannnnnn/scaffold.git ~/scaffold
 cd ~/scaffold && ./install.sh
 ```
 

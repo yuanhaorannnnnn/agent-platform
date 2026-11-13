@@ -183,6 +183,7 @@ switch_env_profile() {
         anthropic ) auth_mode="api_key";   token_var_prefix="CLAUDE_ANTHROPIC"; required_vars="CLAUDE_ANTHROPIC_API_KEY ANTHROPIC_API_KEY" ;;
         kimi )      auth_mode="auth_token"; token_var_prefix="KIMI";             required_vars="KIMI_API_KEY KIMI_ANTHROPIC_BASE_URL" ;;
         deepseek )  auth_mode="auth_token"; token_var_prefix="DEEPSEEK";         required_vars="DEEPSEEK_API_KEY DEEPSEEK_ANTHROPIC_BASE_URL" ;;
+        glm )      auth_mode="auth_token"; token_var_prefix="GLM";             required_vars="GLM_API_KEY GLM_ANTHROPIC_BASE_URL" ;;
         * ) return 2 ;;
     esac
 
@@ -210,6 +211,7 @@ print_env_profiles() {
     echo "  anthropic  requires CLAUDE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY"
     echo "  kimi       requires KIMI_API_KEY and KIMI_ANTHROPIC_BASE_URL"
     echo "  deepseek   requires DEEPSEEK_API_KEY and DEEPSEEK_ANTHROPIC_BASE_URL"
+    echo "  glm        requires GLM_API_KEY and GLM_ANTHROPIC_BASE_URL"
 }
 
 show_current() {
@@ -252,7 +254,7 @@ select_profile() {
     collect_profiles
     if [ "${#profiles[@]}" -eq 0 ]; then
         case "$choice" in
-            anthropic | kimi | deepseek )
+            anthropic | kimi | deepseek | glm )
                 switch_env_profile "$choice"
                 return $?
                 ;;
@@ -275,7 +277,7 @@ select_profile() {
 
     if [ -z "$selected" ]; then
         case "$choice" in
-            anthropic | kimi | deepseek )
+            anthropic | kimi | deepseek | glm )
                 switch_env_profile "$choice"
                 return $?
                 ;;
@@ -327,6 +329,7 @@ case "${1:-}" in
         echo "  claude-switch anthropic"
         echo "  claude-switch kimi"
         echo "  claude-switch deepseek"
+        echo "  claude-switch glm"
         echo "  claude-switch 1"
         ;;
     * )

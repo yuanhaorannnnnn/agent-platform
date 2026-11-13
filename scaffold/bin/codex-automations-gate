@@ -15,7 +15,7 @@
   - $CODEX_HOME/automations/<id>/automation.toml 是调度器实际读取的来源（DB 只是镜像），两者一起写以免漂移。
   - 必须在 Codex 窗口退出后执行；app 运行时的持久化会覆盖这里的修改。
   - MODEL_PLAN 是「chatgpt 模式下应有的档位」，遵守既定上限：绝不用 gpt-6-astra，Sol 最多 low。
-    其中 automation-3 的 gpt-5.6-terra/low 由 DB/WAL 残留帧恢复，如与预期不符请直接改 MODEL_PLAN。
+    所有 active cron 的 GPT-6 模型档位在 MODEL_PLAN 中显式列出。
 """
 
 from __future__ import annotations
@@ -39,15 +39,16 @@ GATE_MARKER = "【执行前门禁"
 
 # provider=chatgpt 时的目标档位（id -> (model, reasoning_effort)）
 MODEL_PLAN: dict[str, tuple[str, str]] = {
-    "automation": ("gpt-5.6-sol", "low"),
-    "automation-2": ("gpt-5.6-terra", "low"),
-    "automation-3": ("gpt-5.6-terra", "low"),
-    "memory-canon": ("gpt-5.6-sol", "low"),
-    "wiki": ("gpt-5.6-luna", "low"),
-    "wiki-clippings": ("gpt-5.6-terra", "medium"),
-    "x": ("gpt-5.6-terra", "medium"),
-    "x-likes": ("gpt-5.6-luna", "low"),
-    "gpt": ("gpt-5.6-luna", "low"),
+    "automation": ("gpt-6-sol", "low"),
+    "automation-2": ("gpt-6-luna", "low"),
+    "automation-3": ("gpt-6-luna", "low"),
+    "memory-canon": ("gpt-6-sol", "low"),
+    "wiki": ("gpt-6-luna", "low"),
+    "wiki-clippings": ("gpt-6-luna", "medium"),
+    "x": ("gpt-6-luna", "medium"),
+    "x-likes": ("gpt-6-luna", "low"),
+    "gpt": ("gpt-6-luna", "low"),
+    "wiki-synthesis": ("gpt-6-sol", "low"),
 }
 
 EXIT_OK = 0
