@@ -17,7 +17,7 @@ add_path /opt/cmake-3.28.3-linux-x86_64/bin
 add_path /opt/nvim
 
 # --- CARLA / UE5 ------------------------------------------------------------
-export CARLA_UNREAL_ENGINE_PATH=/media/yhr/2T/UE5ForCarla
+export CARLA_UNREAL_ENGINE_PATH=/media/$USER/2T/UE5ForCarla
 
 # --- HuggingFace cache redirect ---------------------------------------------
-export HF_HOME="/media/yhr/2T/.cache"
+export HF_HOME="/media/$USER/2T/.cache"

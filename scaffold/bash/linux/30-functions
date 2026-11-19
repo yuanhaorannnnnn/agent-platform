@@ -8,12 +8,12 @@ ue_path() {
         export CARLA_UNREAL_ENGINE_PATH=$HOME/carlahub/UnrealEngine5_carla
         echo "CARLA_UNREAL_ENGINE_PATH set to $HOME/carlahub/UnrealEngine5_carla"
     elif [ "$1" -eq 2 ]; then
-        export CARLA_UNREAL_ENGINE_PATH=/media/yhr/2T/UE5ForCarla
-        echo "CARLA_UNREAL_ENGINE_PATH set to /media/yhr/2T/UE5ForCarla"
+        export CARLA_UNREAL_ENGINE_PATH=/media/$USER/2T/UE5ForCarla
+        echo "CARLA_UNREAL_ENGINE_PATH set to /media/$USER/2T/UE5ForCarla"
     else
         echo "Usage: ue_path {1|2}"
         echo "  1 -> ~/carlahub/UnrealEngine5_carla"
-        echo "  2 -> /media/yhr/2T/UE5ForCarla"
+        echo "  2 -> /media/$USER/2T/UE5ForCarla"
     fi
 }
 
