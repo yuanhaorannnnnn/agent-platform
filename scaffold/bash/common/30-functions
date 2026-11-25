@@ -79,40 +79,48 @@ pix() {
 
 # --- Docker cleanup (interactive) -------------------------------------------
 docker-clean() {
-    echo "========== Docker Disk Usage =========="
-    docker system df
-    echo
+    local confirm status=0 containers used_images='' images id ref size
+    local -a candidates=()
+    printf 'Docker context: '
+    docker context show || return
+    docker system df || return
 
-    echo "========== Matching Containers =========="
-    docker ps -a --filter name=oasis_calra
-    echo
-
-    echo "========== Matching Images =========="
-    docker images | grep '^carlaue5'
-    echo
-
-    read -p "⚠️  Proceed with FULL cleanup? (y/N): " confirm
-    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-        echo "❌ Cancelled."
-        return
+    if read -r -p 'Prune unused build cache older than 30 days (default builder)? [y/N] ' confirm &&
+        [[ "$confirm" == [yY] ]]; then
+        docker buildx prune --builder default --filter until=720h --force || status=1
     fi
 
-    echo "🚀 Cleaning..."
-    docker ps -aq --filter name=oasis_calra | xargs -r docker rm -f
-    docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk '$1 ~ /^carlaue5:/ {print $2}' | xargs -r docker rmi -f
-    docker system prune -f --volumes
+    containers=$(docker container ls --all --quiet --no-trunc) || return
+    if [[ -n "$containers" ]]; then
+        used_images=$(printf '%s\n' "$containers" | xargs docker container inspect --format \
+            '{{.Image}}{{range .Mounts}}{{if eq .Type "image"}}{{"\nIMAGE_MOUNT"}}{{end}}{{end}}') || return
+    fi
+    if [[ $'\n'"$used_images"$'\n' == *$'\nIMAGE_MOUNT\n'* ]]; then
+        echo 'Skipping image cleanup: a container has an image-backed mount.' >&2
+        status=1
+    else
+        images=$(docker image ls --no-trunc --format '{{.ID}} {{.Repository}}:{{.Tag}} {{.Size}}') || return
+        printf '\n%-52s %-16s %s\n' 'Unused image (candidate)' 'IMAGE ID' 'SIZE'
+        while read -r id ref size; do
+            [[ "$id" =~ ^sha256:[0-9a-f]{64}$ ]] || continue
+            [[ $'\n'"$used_images"$'\n' == *$'\n'"$id"$'\n'* ]] && continue
+            printf '%-52s %-16s %s\n' "$ref" "${id:7:12}" "$size"
+            [[ " ${candidates[*]} " == *" $id "* ]] || candidates+=("$id")
+        done <<< "$images"
+        if ((${#candidates[@]} == 0)); then
+            echo 'No unused image candidates.'
+        else
+            echo 'Only the IDs listed above will be attempted. Unused rollback images can be removed.'
+            echo 'Docker may refuse removal, for example if an image has multiple tags or is now in use.'
+            if read -r -p "Remove these ${#candidates[@]} image(s)? [y/N] " confirm && [[ "$confirm" == [yY] ]]; then
+                docker image rm --no-prune "${candidates[@]}" || status=1
+            fi
+        fi
+    fi
 
-    echo
-    echo "========== After Cleanup =========="
-    docker system df
-}
-
-# --- Docker cleanup (non-interactive, carlaue5 only) -------------------------
-docker-clean-carla() {
-    echo "Cleaning carlaue5 images..."
-    docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | awk '$1 ~ /^carlaue5:/ {print $2}' | xargs -r docker rmi -f
-    docker image prune -f
-    echo "Done."
+    printf '\nDocker disk usage after cleanup:\n'
+    docker system df || return
+    return "$status"
 }
 
 # --- tmux session helpers ----------------------------------------------------
